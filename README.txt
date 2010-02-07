@@ -1,11 +1,18 @@
 Nicholas Chaimov
+Andrew Reinders
 CIS 461
-Jan 11th, 2010
+Feb 8th, 2010
 
 To build, run make.
 To run the scanner only, run scan <filename>.
-To run the parser, run parse <filename>.
+To run the parser, run parse <filename>. Use parse -d to output
+	debugging information.
 
+To view the generated abstract syntax tree, run
+	tree <filename>
+The tree will be created in a file called out.pdf.
+
+Graphviz must be installed for the tree command to work.
 
 
 
