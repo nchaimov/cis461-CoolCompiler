@@ -1,0 +1,223 @@
+//
+// Grammar definition (CUP) file of a 
+//   tiny procedural language
+//
+
+
+parser code {:
+
+       int errorCount = 0;
+       static int MAX_ERRORS = 20; 
+              
+       // Debugging
+       public void dbg(String msg) {
+          // Uncomment to turn debugging back on 
+       	  // System.err.println(msg); 
+       }
+
+       // Driver should give us an ErrorReport object that we can 
+       // share with the scanner and other phases.  If it doesn't, we'll 
+       // print to StdErr. 
+       ErrorReport report = null; 
+       public void setErrorReport( ErrorReport _report) {
+       	      report = _report; 
+       }
+       
+       public void syntax_error(java_cup.runtime.Symbol cur_token) {
+           Symbolx the_token = (Symbolx) cur_token; 
+	   report_error("Syntax error in line " +
+			the_token.line_num +
+			", near column " +
+			the_token.col_num,  null);
+	   ++ errorCount; 
+	   if (errorCount > MAX_ERRORS) {
+	       System.err.println("More than " + MAX_ERRORS + " errors. " + 
+				"Giving up"); 
+	       done_parsing(); 
+	       System.exit(1); 
+	   }
+       }
+
+       // Overrides default error reporting
+       public void report_error(String msg, Object ignored) {
+       	     if (report == null) {
+	        System.err.println(msg); 
+	     } else {
+	        report.err(msg); 
+             }
+       }
+
+       // Convenience form
+       public void report_error(String msg) {
+       	      report_error(msg, null); 
+       }
+
+:}
+
+// ====   Terminal symbols (interface to JFlex) ========
+
+// Punctuation 
+
+terminal LBRACE, RBRACE, SEMI, COLON, ASSIGN, COMMA ;
+terminal DOT, AT, LPAREN, RPAREN, NEG ; 
+terminal TIMES, DIV, PLUS, MINUS ;
+terminal LEQ, LT, EQ, NOT; 
+terminal RIGHTARROW; 
+
+// Keywords
+terminal CLASS, INHERITS, IF, THEN, ELSE, FI, WHILE, DO, OD, LET, IN ;
+terminal CASE, OF, ESAC; 
+terminal NEW, ISVOID; 
+
+
+
+// Literals
+
+terminal TRUE, FALSE, INTLIT, STRINGLIT;
+
+// Identifiers
+
+terminal ID;        // Identifier (variable name)
+terminal TYPEID;    // Type (class) name
+
+// ====   Non-terminal symbols (defined by CUP grammar below) ====
+//        (write the grammar, then add symbols to this list) 
+
+nonterminal ASTnode program, classes, class, optParent, features; 
+nonterminal ASTnode feature, method, formals, formalsPresent, attribute; 
+nonterminal ASTnode formal; 
+nonterminal ASTnode exp0, literal, exp1, objDispatch, classDispatch, thisDispatch; 
+nonterminal ASTnode actuals, someActuals; 
+nonterminal ASTnode exp2, exp3, exp4, exp5, exp6, comp, exp7, exp8, expr ; 
+nonterminal ASTnode exprSeq, letexpr, introductions, introduction, optInitial;
+nonterminal ASTnode typecases, typecase; 
+nonterminal ASTnode optDeclaration, optExprSeq;
+nonterminal empty; 
+
+precedence nonassoc LT, LEQ, EQ;
+
+// ====   Grammar ======
+
+// Cool manual:     program ::= class;+
+// A program is a sequence of one or more classes, 
+//   separated by semicolons
+
+program ::= classes:cs {: RESULT = cs; :} ; 
+
+classes ::= classes:cs class:c SEMI {: RESULT = new ASTnode(sym.SEMI, cs, null, c, null); :}
+        |   class:c SEMI {: RESULT = c; :}
+	|   error SEMI 
+	;
+
+// Cool manual:   class ::= class TYPE [inherits TYPE] { feature;* }
+// 
+class	  ::=	CLASS TYPEID:t optParent:p LBRACE features:f RBRACE 
+				{: RESULT = new ASTnode(sym.CLASS, p, null, f, t); :}; 
+optParent ::=   INHERITS TYPEID:t {: RESULT = new ASTnode(sym.INHERITS, t); :}
+	  |	empty ; 
+features  ::=   features:fs feature:f SEMI {: RESULT = new ASTnode(sym.SEMI, fs, null, f, null); :}
+	  | 	empty 
+	  ;
+
+// Cool manual: feature ::= ID( formal,* ): TYPE { expr }
+//                      |   ID: TYPE [ :=  expr ]
+//
+feature	 ::=  method:m {: RESULT = m; :} | attribute:a {: RESULT = a; :}; 
+method   ::=  ID:id LPAREN formals:f RPAREN COLON TYPEID:type 
+	         LBRACE expr:e RBRACE {: RESULT = new ASTnode(Nodes.METHOD, new ASTnode(sym.COLON, new ASTnode(sym.ID, id), null, new ASTnode(sym.TYPEID, type), null), f, e, null); :} ; 
+formals  ::=  empty | formalsPresent:f {: RESULT = f; :} ; 
+formalsPresent ::=  formal:f {: RESULT = f; :} | formalsPresent:fp COMMA formal:f {: RESULT = new ASTnode(sym.COMMA, f, null, fp, null); :}; 
+
+// Done -- ADD ATTRIBUTE
+
+attribute ::= ID:id COLON TYPEID:type optDeclaration:opt {: RESULT = new ASTnode(Nodes.ATTRIBUTE, new ASTnode(sym.COLON, new ASTnode(sym.ID, id), null, new ASTnode(sym.TYPEID, type), null), null, opt, null); :};
+optDeclaration ::= ASSIGN expr:e {: RESULT = e; :} | empty ;
+
+// Cool manual: formal ::= ID : TYPE 
+formal ::= ID:id COLON TYPEID:type {: RESULT = new ASTnode(sym.COLON, new ASTnode(sym.ID, id), null, new ASTnode(sym.TYPEID, type), null); :}; 
+
+// Cool manual gives precedence (left associative except as noted)
+// 1: . @ 
+// 2: ~ 
+// 3: isvoid 
+// 4:  * / 
+// 5: + -
+// 6: <= < = (non-associative)
+// 7: not 
+// 8: := (right-associative)
+// then control operators if, while, let, etc., 
+// with "let" gobbling as much to the right as possible
+//
+// Start at highest priority ... We'll just name them exp0, exp1, etc.
+exp0    ::= ID:id {: RESULT = new ASTnode(sym.ID, id); :} | literal:l {: RESULT = l; :} | LPAREN expr:e RPAREN {: RESULT = e; :}
+			| NEW TYPEID:type {: RESULT = new ASTnode(sym.NEW, type); :}  ; 
+literal ::=  TRUE {: RESULT = new ASTnode(sym.TRUE, null); :} | FALSE {: RESULT = new ASTnode(sym.FALSE, null); :}
+			| STRINGLIT:s {: RESULT = new ASTnode(sym.STRINGLIT, s); :} | INTLIT:i {: RESULT = new ASTnode(sym.INTLIT, i); :}  ; 
+
+// Method dispatch with . and @   (left-associative) 
+// Manual:  expr ::= expr[@TYPE].ID(expr,*)
+exp1   ::=  objDispatch:e {: RESULT = e; :} | classDispatch:e {: RESULT = e; :} 
+			| thisDispatch:e {: RESULT = e; :} | exp0:e {: RESULT = e; :} ; 
+objDispatch ::= exp1:e DOT ID:id LPAREN actuals:a RPAREN {: RESULT = new ASTnode(sym.DOT, e, null, a, id); :}; 
+classDispatch ::= exp1:e AT TYPEID:type DOT ID:id LPAREN actuals:a RPAREN {: RESULT = new ASTnode(sym.DOT, e, new ASTnode(sym.TYPEID, type), a, id); :} ; 
+thisDispatch ::= ID:id LPAREN actuals:a RPAREN {: RESULT = new ASTnode(sym.DOT, null, null, a, id); :}; 
+
+actuals ::= empty | someActuals:e {: RESULT = e; :} ; 
+someActuals ::= someActuals:sa COMMA expr:e {: RESULT = new ASTnode(sym.COMMA, e, null, sa, null); :} | expr:e {: RESULT = e; :} ; 
+
+// Integer negation is ~ 
+exp2 ::= NEG exp2:e {: RESULT = new ASTnode(sym.NEG, e, null, null, null); :}| exp1:e {: RESULT = e; :} ; 
+
+// isvoid  (makes little sense for this to associate, but what the heck)
+exp3 ::= ISVOID exp3:e {: RESULT = new ASTnode(sym.ISVOID, e, null, null, null); :} | exp2:e {: RESULT = e; :} ; 
+
+// multiplicative
+exp4 ::= exp4:exps TIMES exp3:e {: RESULT = new ASTnode(sym.TIMES, exps, null, e, null); :} | exp4:exps DIV exp3:e {: RESULT = new ASTnode(sym.DIV, exps, null, e, null); :} | exp3:e {: RESULT = e; :}; 
+
+// additive
+exp5 ::= exp5:exps PLUS exp4:e {: RESULT = new ASTnode(sym.PLUS, exps, null, e, null); :} | exp5:exps MINUS exp4:e {: RESULT = new ASTnode(sym.MINUS, exps, null, e, null); :}| exp4:e {: RESULT = e; :}; 
+
+// Comparisons are non-associative 
+
+exp6 ::= exp5:e1 comp:cmp exp5:e2 {: RESULT = new ASTnode(cmp.kind, e1, null, e2, null); :} | exp5:e {: RESULT = e; :};
+comp ::= LT {: RESULT = new ASTnode(sym.LT, null); :} | LEQ {: RESULT = new ASTnode(sym.LEQ, null); :} | EQ {: RESULT = new ASTnode(sym.EQ, null); :};
+
+// Logical negation
+exp7 ::= NOT exp7:e {: RESULT = new ASTnode(sym.NOT, e, null, null, null); :}| exp6:e {: RESULT = e; :} ; 
+
+// Assignment is right-associative 
+exp8 ::= exp7:e ASSIGN exp8:exps {: RESULT = new ASTnode(sym.ASSIGN, e, null, exps, null); :} | exp7:e {: RESULT = e; :} ; 
+
+expr ::= exp8:e {: RESULT = e; :}; // Attach to higher-level expressions
+
+// Control flow --- switch to naming things now 
+
+expr ::=  IF expr:e0 THEN expr:e1 ELSE expr:e2 FI {: RESULT = new ASTnode(sym.IF, e0, e1, e2, null); :}
+     |    WHILE expr:e0 DO expr:e1 OD {: RESULT = new ASTnode(sym.WHILE, e0, null, e1, null); :}
+     |    exprSeq:e {: RESULT = e; :}
+     |    CASE expr:e OF typecases:cases ESAC {: RESULT = new ASTnode(sym.CASE, e, null, cases, null); :}
+     |    letexpr:e {: RESULT = e; :}
+     ;
+
+// { expr;+ }
+
+exprSeq ::= LBRACE expr:e SEMI optExprSeq:eseq RBRACE {: RESULT = new ASTnode(sym.SEMI, e, null, eseq, null); :};
+optExprSeq ::= optExprSeq:eseq expr:e SEMI {: RESULT = new ASTnode(sym.SEMI, eseq, null, e, null); :}| empty;
+
+
+letexpr ::=  LET introductions:is IN expr:e {: RESULT = new ASTnode(sym.LET, is, null, e, null); :}; 
+
+introductions ::= introductions:is COMMA introduction:i {: RESULT = new ASTnode(sym.COMMA, i, null, is, null); :}
+	      |   introduction:i {: RESULT = i; :} ; 
+introduction ::= ID:id COLON TYPEID:type optInitial:init {: RESULT = new ASTnode(sym.ASSIGN, new ASTnode(sym.COLON, new ASTnode(sym.ID, id), null, new ASTnode(sym.TYPEID, type), null), null, init, null); :};
+optInitial  ::= ASSIGN expr:e {: RESULT = e; :} | empty ; 
+
+typecases ::= typecases:ts typecase:t {: RESULT = new ASTnode(sym.SEMI, ts, null, t, null); :} | typecase:t {: RESULT = t; :} ; 
+typecase  ::= ID:id COLON TYPEID:type RIGHTARROW expr:e SEMI {: RESULT = new ASTnode(sym.RIGHTARROW, new ASTnode(sym.COLON, new ASTnode(sym.ID, id), null, new ASTnode(sym.TYPEID, type), null), null, e, null); :}
+	  |    error SEMI 
+	       {: parser.report_error("Messed up typecase"); :}
+         ; 
+
+
+
+empty ::=  ; 

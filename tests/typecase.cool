@@ -1,0 +1,16 @@
+class Foo inherits Bazz {
+     a : Razz := case self of
+		      n : Razz => 5; 
+   	         esac;
+};
+
+class Main {
+  a : Bazz := new Bazz;
+  main(): String { "do nothing" };
+
+};
+
+
+
+
+

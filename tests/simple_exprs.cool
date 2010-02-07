@@ -1,0 +1,19 @@
+class Foo {
+     a : String := "This is a string";
+	 b : Int := 4123;
+	 c : Int := b * 10;
+	 d : Boolean := true;
+	 e : SomeClass := b@AnotherClass.method(a, b);
+	 f : SomeClass := b.method(a, b);
+	 g : SomeClass := method(a, b, c);
+	 h : Int := 1 + 2 * 3 / 4 * 5 + ( ~ 6 - 7) / 8 + (c := b:= 34);
+	 j : Int := if true then 1 else 2 fi;
+	 k : Int := while 1 <= 2 do j := 3 od;
+	 l : Int := {1 + 2; 3 + 4; 5 + 6;};
+	 m : Int := let var1 : Int in var1 + 4;
+	 n : Int := case d of
+			d : Boolean => 4;
+			g : Int => g + 1;
+			q : String => ~1;
+	esac;
+};

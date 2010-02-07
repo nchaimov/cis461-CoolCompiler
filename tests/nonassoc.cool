@@ -1,0 +1,3 @@
+class Main {
+    methodName() : Int { (let i : Int := h in { h := h + 2; i; } ) };
+};
