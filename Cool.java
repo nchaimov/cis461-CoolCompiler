@@ -15,7 +15,12 @@ public class Cool {
     // Internal state
     ErrorReport report; 
 
-    boolean DebugMode = false; // True => parse in debug mode 
+	private static final String PARSE_DEBUG_OPTION = "dp";
+	private static final String TYPECHECK_DEBUG_OPTION = "dt";
+	private static final String PRINT_TREE_OPTION = "t";
+
+    boolean debugParser = false; // True => parse in debug mode 
+	boolean debugTypechecker = false;
 	boolean printTree = false;
 
 
@@ -34,22 +39,24 @@ public class Cool {
 	try {
 	    // Comman line parsing
 	    Options options = new Options(); 
-	    options.addOption("d", false, "debug mode (trace parse states)"); 
-		options.addOption("t", false, "output abstract syntax tree in graphviz format");
+	    options.addOption(PARSE_DEBUG_OPTION, false, "parser debug mode (trace parse states)"); 
+		options.addOption(PRINT_TREE_OPTION, false, "output abstract syntax tree in graphviz format");
+		options.addOption(TYPECHECK_DEBUG_OPTION, false, "typechecker debug mode");
 	    CommandLineParser  cliParser = new GnuParser(); 
 	    CommandLine cmd = cliParser.parse( options, args); 
-	    DebugMode = cmd.hasOption("d"); 
-	    printTree = cmd.hasOption("t");
+	    debugParser = cmd.hasOption(PARSE_DEBUG_OPTION); 
+	    printTree = cmd.hasOption(PRINT_TREE_OPTION);
+		debugTypechecker = cmd.hasOption(TYPECHECK_DEBUG_OPTION);
 	    String[] remaining = cmd.getArgs(); 
 	    int argc = remaining.length; 
 	    if (argc == 0) {
-		report.err("Input file name required"); 
-		System.exit(1); 
+			report.err("Input file name required"); 
+			System.exit(1); 
 	    } else if (argc == 1) {
-		sourceFile = remaining[0]; 
+			sourceFile = remaining[0]; 
 	    } else {
-		report.err("Only 1 input file name can be given;"+
-				    " ignoring other(s)"); 
+			report.err("Only 1 input file name can be given;"+
+				    	" ignoring other(s)"); 
 	    }
 	} catch (Exception e) {
 	    System.err.println("Argument parsing problem"); 
@@ -67,8 +74,12 @@ public class Cool {
             parser p = new parser( scanner); 
             p.setErrorReport(report); 
 	    Symbol result;
-	    if (DebugMode) { result =  p.debug_parse(); }
-	    else { result = p.parse(); }
+	    if (debugParser) {
+			System.err.println("Parsing in debug mode.");
+			result =  p.debug_parse();
+		} else { 
+			result = p.parse();
+		}
 	    System.err.println("Done parsing"); 
 		ASTnode tree = (ASTnode) result.value;
 		if (printTree) tree.dump();
