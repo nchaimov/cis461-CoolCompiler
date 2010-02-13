@@ -18,11 +18,17 @@ JAVACOPT =  -Xlint:unchecked
 
 all:   Cool.class
 
-Cool.class:	Cool.java ScanDriver.class parser.class
+Cool.class:	Cool.java ScanDriver.class parser.class Util.class TypeChecker.class
 	javac -classpath .:$(LIBS) $(JAVACOPT) $< 
 
 ScanDriver.class:	ScanDriver.java coolScanner.java
 	javac -classpath .:$(LIBS) $(JAVACOPT) $< 
+
+Util.java:	sym.java Nodes.java
+	ruby gen_idToName.rb > Util.java
+
+ASTnode.java: Util.class
+	javac -classpath .:$(LIBS) $(JAVACOPT) Util.java 
 
 %.class:	%.java
 	javac -classpath .:$(LIBS) $(JAVACOPT) $< 
@@ -40,8 +46,7 @@ coolScanner.java:	Cool.jflex  sym.java
 
 #=================
 
-clean: ; rm *.class parser.java coolScanner.java *~
-
+clean: ; rm *.class parser.java Util.java coolScanner.java
 
 
 
