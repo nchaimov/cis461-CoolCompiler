@@ -7,20 +7,19 @@
 //  and passed to each stage that needs a place to send error messages. 
 //
 
-import java.io.*; 
+public class ErrorReport {
 
-class ErrorReport {
+	/**
+	 * Print an error message. It is up to the client to include information
+	 * like the line and position at which the errror appeared; this just spews
+	 * it to the appropriate place.
+	 */
+	public void err(String msg) {
+		System.err.println(msg);
+	}
 
-    /** Print an error message.  It is up to the client to include 
-     *  information like the line and position at which the errror 
-     *  appeared; this just spews it to the appropriate place. 
-     */
-       public void err(String msg) {
-             System.err.println(msg); 
-       }
+	// You could definitely improve this by making different
+	// severity levels of error and warning, and perhaps by killing
+	// the program when too many errors have occurred.
 
-    // You could definitely improve this by making different
-    // severity levels of error and warning, and perhaps by killing
-    // the program when too many errors have occurred. 
-  
-}    
+}

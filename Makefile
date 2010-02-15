@@ -27,8 +27,14 @@ ScanDriver.class:	ScanDriver.java coolScanner.java
 Util.java:	sym.java Nodes.java
 	ruby gen_idToName.rb > Util.java
 
-ASTnode.java: Util.class
+Util.class: Util.java Environment.class
 	javac -classpath .:$(LIBS) $(JAVACOPT) Util.java 
+
+Environment.class: Environment.java HashStack.class
+	javac -classpath .:$(LIBS) $(JAVACOPT) Environment.java
+
+ASTnode.class: ASTnode.java Util.class
+	javac -classpath .:$(LIBS) $(JAVACOPT) ASTnode.java
 
 %.class:	%.java
 	javac -classpath .:$(LIBS) $(JAVACOPT) $< 

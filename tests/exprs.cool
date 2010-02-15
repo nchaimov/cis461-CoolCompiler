@@ -1,0 +1,8 @@
+class Main {
+    a : Bool := true;
+    b : Bool := false;
+	c : Int := 4;
+	d : String := "This is a string";
+	e : Int := c;
+	f : Int := (c := 5);
+};

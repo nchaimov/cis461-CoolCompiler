@@ -1,0 +1,4 @@
+class Foo {
+     doh(var1 : Int, var2 : String, var3 : Bool, var4 : Object) : Int { (let i : Int := h in { h := h + 2; i; } ) };
+};
+

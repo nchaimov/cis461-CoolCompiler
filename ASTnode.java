@@ -1,9 +1,10 @@
-class ASTnode {
+public class ASTnode {
 	public int kind; /* Instead of using subclassing. Example binop */
 	public ASTnode left;
 	public ASTnode center;
 	public ASTnode right;
 	public Object value;
+	public Environment.CoolClass type;
 
 	protected static int nodeNum = 0;
 
@@ -39,11 +40,13 @@ class ASTnode {
 		StringBuilder stringBuilder = new StringBuilder();
 		stringBuilder.append("\tnode");
 		stringBuilder.append(id);
-		stringBuilder.append(" [label=\"<f0> |<f1> ");
+		stringBuilder.append(" [label=\"<f0> |{ <f1> ");
 		stringBuilder.append(Util.idToName(kind));
 		stringBuilder.append("");
 		stringBuilder.append((value != null ? (" (" + value + ")") : ""));
-		stringBuilder.append("|<f2> \"];");
+		stringBuilder.append("| <ft> ");
+		stringBuilder.append(type != null ? type : "");
+		stringBuilder.append("}| <f2> \"];");
 		System.out.println(stringBuilder.toString());
 		if (left != null) {
 			leftid = ++ASTnode.nodeNum;
@@ -69,7 +72,7 @@ class ASTnode {
 			StringBuilder stringBuilder2 = new StringBuilder();
 			stringBuilder2.append("\t\"node");
 			stringBuilder2.append(id);
-			stringBuilder2.append("\":f1 -> \"node");
+			stringBuilder2.append("\":ft -> \"node");
 			stringBuilder2.append(centerid);
 			stringBuilder2.append("\":f1;");
 			System.out.println(stringBuilder2.toString());

@@ -137,7 +137,7 @@ formals  ::=  empty
 			| formalsPresent:f {: RESULT = f; :} ; 
 			
 formalsPresent ::=  formal:f {: RESULT = f; :}
- 				  | formalsPresent:fp COMMA formal:f {: RESULT = new ASTnode(sym.COMMA, f, null, fp, null); :}; 
+ 				  | formalsPresent:fp COMMA formal:f {: RESULT = new ASTnode(sym.COMMA, fp, null, f, null); :}; 
 
 
 attribute ::= ID:id COLON TYPEID:type optDeclaration:opt
@@ -201,7 +201,7 @@ thisDispatch ::= ID:id LPAREN actuals:a RPAREN
 actuals ::= empty 
 		  | someActuals:e {: RESULT = e; :} ; 
 
-someActuals ::= someActuals:sa COMMA expr:e {: RESULT = new ASTnode(sym.COMMA, e, null, sa, null); :}
+someActuals ::= someActuals:sa COMMA expr:e {: RESULT = new ASTnode(sym.COMMA, sa, null, e, null); :}
 			  | expr:e {: RESULT = e; :} ; 
 
 
@@ -280,7 +280,7 @@ typecases ::= typecases:ts typecase:t {: RESULT = new ASTnode(sym.SEMI, ts, null
 	
 typecase  ::= ID:id COLON TYPEID:type RIGHTARROW expr:e SEMI
    	          {: RESULT = new ASTnode(sym.RIGHTARROW, new ASTnode(sym.COLON, new ASTnode(sym.ID, id), null, new ASTnode(sym.TYPEID, type), null), null, e, null); :}
-         |    error SEMI 
+            | error SEMI 
               {: parser.report_error("Messed up typecase"); :} ; 
 
 empty ::=  ; 
