@@ -1,0 +1,4 @@
+class Main {
+	a : Object;
+	b : Bool := isvoid a;
+};

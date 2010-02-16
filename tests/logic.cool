@@ -1,0 +1,14 @@
+class Main {
+	a : Bool := false;
+	b : Bool := not a;
+	c : Bool := 4 < 2;
+	d : Bool := 4 <= 2;
+	e : Bool := 1 = 2;
+	f : Bool := "String" = "Another String";
+	g : Bool := true = false;
+	
+	v1 : Object;
+	v2 : Object;
+	
+	v3 : Bool := v1 = v2;
+};

@@ -1,4 +1,6 @@
 class Foo {
+	 h : Int := 2 + 5;
      doh(var1 : Int, var2 : String, var3 : Bool, var4 : Object) : Int { (let i : Int := h in { h := h + 2; i; } ) };
+	 foo() : Int {{ self.doh(1, "a", true, true); }};
 };
 

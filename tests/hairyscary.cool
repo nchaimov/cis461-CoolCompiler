@@ -9,7 +9,7 @@ class Foo inherits Bazz {
 
      b : Int := a.doh() + g.doh() + doh() + printh();
 
-     doh(var1 : Int, var2 : String) : Int { (let i : Int := h in { h := h + 2; i; } ) };
+     doh() : Int { (let i : Int := h in { h := h + 2; i; } ) };
 
 };
 

@@ -46,6 +46,8 @@ public class TypeChecker {
 
 			log("\n--> Pass 5: typecheck methods");
 			checkMethods();
+
+			log("\n--> Typechecking completed!");
 		} catch (Exception ex) {
 			System.err.println("*** Typechecking Failed! ***");
 			ex.printStackTrace();
@@ -442,6 +444,88 @@ public class TypeChecker {
 				return setType(caseClass, node);
 			}
 
+			case sym.WHILE: {
+				check(curClass, node.left);
+				if (node.left.type != env.getClass("Bool"))
+					throw new TypeCheckException(MessageFormat.format(
+							"Loop condition of a WHILE loop must be a Bool, but found {0}",
+							node.left.type));
+				check(curClass, node.right);
+				return setType(OBJECT, node);
+			}
+
+			case sym.ISVOID: {
+				check(curClass, node.left);
+				return setType(env.getClass("Bool"), node);
+			}
+
+			case sym.NOT: {
+				check(curClass, node.left);
+				if (node.left.type != env.getClass("Bool"))
+					throw new TypeCheckException(MessageFormat.format(
+							"Argument to NOT must be Bool, but found {0}", node.left.type));
+				return setType(env.getClass("Bool"), node);
+			}
+
+			case sym.LT:
+			case sym.LEQ: {
+				check(curClass, node.left);
+				check(curClass, node.right);
+				if (node.left.type != env.getClass("Int"))
+					throw new TypeCheckException(
+							"Left argument of comparison must be Int, but found" + node.left.type);
+				if (node.right.type != env.getClass("Int"))
+					throw new TypeCheckException(
+							"Right argument of comparison must be Int, but found" + node.left.type);
+				return setType(env.getClass("Bool"), node);
+			}
+
+			case sym.MINUS:
+			case sym.DIV:
+			case sym.TIMES:
+			case sym.PLUS: {
+				check(curClass, node.left);
+				check(curClass, node.right);
+				if (node.left.type != env.getClass("Int") || node.right.type != env.getClass("Int"))
+					throw new TypeCheckException("The operator " + Util.idToName(node.kind)
+							+ " takes two arguments of type Int");
+				return setType(env.getClass("Int"), node);
+			}
+
+			case sym.EQ: {
+				check(curClass, node.left);
+				check(curClass, node.right);
+
+				if ((node.left.type == env.getClass("Int") && node.right.type != env
+						.getClass("Int"))
+						|| (node.left.type == env.getClass("Bool") && node.right.type != env
+								.getClass("Bool"))
+						|| (node.left.type == env.getClass("String") && node.right.type != env
+								.getClass("String"))
+						|| (node.right.type == env.getClass("Int") && node.left.type != env
+								.getClass("Int"))
+						|| (node.right.type == env.getClass("Bool") && node.left.type != env
+								.getClass("Bool"))
+						|| (node.right.type == env.getClass("String") && node.left.type != env
+								.getClass("String")))
+					throw new TypeCheckException(
+							MessageFormat
+									.format(
+											"Ints, Bools and Strings can only be compared to each other, but tried to compare a {0} to a {1}",
+											node.left.type, node.right.type));
+
+				return setType(env.getClass("Bool"), node);
+			}
+
+			case sym.NEG: {
+				check(curClass, node.left);
+				if (node.left.type != env.getClass("Int"))
+					throw new TypeCheckException(
+							"The ~ operator only takes objects of type Int, but found "
+									+ node.left.type);
+				return setType(env.getClass("Int"), node);
+			}
+
 			default:
 				throw new TypeCheckException("Unimplemented node type: " + Util.idToName(node.kind));
 			}
@@ -604,7 +688,8 @@ public class TypeChecker {
 		return result;
 	}
 
-	protected Environment.CoolClass lookupAttr(Environment.CoolClass cls, String id) {
+	protected Environment.CoolClass lookupAttr(Environment.CoolClass cls, String id)
+			throws TypeCheckException {
 		if (id.equals("self")) {
 			log(MessageFormat.format("SELF is of type{0}", cls));
 			return cls;
@@ -613,7 +698,9 @@ public class TypeChecker {
 		Environment.CoolClass result = env.localEnv.get(id);
 		if (result == null) {
 			log(MessageFormat.format("Looking up attribute {0} in current class {1}", id, cls));
-			result = cls.attributes.get(id).type;
+			if (cls.attributes.get(id) != null) {
+				result = cls.attributes.get(id).type;
+			}
 		} else {
 			log(MessageFormat.format("Attribute {0} found in local environment: ", id, result));
 			return result;
@@ -621,13 +708,18 @@ public class TypeChecker {
 		while (result == null && cls != OBJECT) {
 			cls = cls.parent;
 			log(MessageFormat.format("Looking up attribute {0} in class {1}", id, cls));
-			result = cls.attributes.get(id).type;
+			if (cls.attributes.get(id) != null) {
+				result = cls.attributes.get(id).type;
+			}
 		}
 		if (result == null) {
 			log(MessageFormat.format("Attribute {0} not found", id));
+			throw new TypeCheckException(MessageFormat.format(
+					"Attribute {0} referenced but not defined", id));
 		} else {
 			log(MessageFormat.format("Attribute {0} found in class {1}: {2}", id, cls, result));
 		}
+
 		return result;
 	}
 

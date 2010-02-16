@@ -1,5 +1,6 @@
 import java.text.MessageFormat;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -117,9 +118,33 @@ public class Environment {
 	}
 
 	public void addMethod(CoolClass c, CoolMethod m) throws EnvironmentException {
-		if (c.methods.containsKey(m.getName()))
+		if (c.methods.containsKey(m.name))
 			throw new EnvironmentException(MessageFormat.format(
 					"Attempting to define method already defined: {0} (in class {1})", m, c));
+		CoolClass parent = c.parent;
+		while (parent != getClass("Object")) {
+			if (parent.methods.containsKey(m.name)) {
+				CoolMethod m2 = parent.methods.get(m.name);
+				if (m.arguments.size() != m2.arguments.size())
+					throw new EnvironmentException(
+							MessageFormat
+									.format(
+											"Attempting to create overriding method {0} with different number of arguments from overriden method {1}",
+											m, m2));
+				Iterator<CoolAttribute> iter1 = m.arguments.iterator();
+				Iterator<CoolAttribute> iter2 = m2.arguments.iterator();
+				while (iter1.hasNext() && iter2.hasNext()) {
+					if ((iter1.next().type != iter2.next().type) || (m.type != m2.type))
+						throw new EnvironmentException(
+								MessageFormat
+										.format(
+												"Attempting to override method {0} with method of different signature {1}.",
+												m2, m));
+				}
+
+			}
+			parent = parent.parent;
+		}
 		log(MessageFormat.format("Adding method {0} to class {1} ({2})", m, c, m.getName()));
 		c.methods.put(m.name, m);
 	}

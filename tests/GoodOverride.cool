@@ -1,0 +1,8 @@
+class A {
+	foo(a : String, b : String) : Int {{ 4; }};
+};
+
+class B inherits A {
+	foo(a : String, b : String) : Int {{ 5; }};
+};
+

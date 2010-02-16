@@ -1,4 +1,4 @@
 class Main {
 	x : Int := 0;
-	a() : Int {{ while true do x := 1 od; }};
+	a() : Object {{ while true do x := 1 od; }};
 };
