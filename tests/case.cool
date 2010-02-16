@@ -1,0 +1,25 @@
+class Main {
+	a : A := new A;
+	b : Object := case a of
+				n : A => (n.foo());
+				n : B => (n.bar());
+				n : C => (n.baz());
+				n : D => (n.foo());
+		esac;
+};
+
+class A { 
+	foo() : Int {{4;}};
+};
+
+class B { 
+	bar() : Bool {{true;}};
+};
+
+class C { 
+	baz() : String {{"String!";}};
+};
+
+class D { 
+	foo() : Object {{new Object;}};
+};

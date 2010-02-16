@@ -265,7 +265,7 @@ optExprSeq ::= optExprSeq:eseq expr:e SEMI {: RESULT = new ASTnode(sym.SEMI, ese
 letexpr ::=  LET introductions:is IN expr:e {: RESULT = new ASTnode(sym.LET, is, null, e, null); :}; 
 
 
-introductions ::= introductions:is COMMA introduction:i {: RESULT = new ASTnode(sym.COMMA, i, null, is, null); :}
+introductions ::= introductions:is COMMA introduction:i {: RESULT = new ASTnode(sym.COMMA, is, null, i, null); :}
 	      	  |   introduction:i {: RESULT = i; :} ; 
 	
 introduction ::= ID:id COLON TYPEID:type optInitial:init

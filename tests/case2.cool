@@ -1,0 +1,25 @@
+class Main {
+	a : A := new D;
+	b : Object := case a of
+				n : A => ( new D );
+				n : B => ( new C );
+				n : C => ( new B );
+				n : D => ( new D );
+		esac;
+};
+
+class A { 
+	
+};
+
+class B inherits A { 
+	
+};
+
+class C inherits B { 
+	
+};
+
+class D inherits C { 
+	
+};

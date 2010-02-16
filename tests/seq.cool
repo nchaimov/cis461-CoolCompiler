@@ -1,3 +1,4 @@
 class Main {
-    a : Int := { true; false; 4; 5;};
+	b : Int := { "3"; 3; };
+    a : String := { true; false;  4; 5; if true then "String!" else "Other String!" fi;};
 };

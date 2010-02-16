@@ -1,0 +1,4 @@
+class Main {
+	b : Int := let x : Int := 1 in x;
+	a : Int := let x : Int := 4, y : Bool := false, z : Int in if y then x else (z := 1) fi;
+};

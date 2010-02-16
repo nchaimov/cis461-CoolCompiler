@@ -43,6 +43,9 @@ public class TypeChecker {
 
 			log("\n--> Pass 4: typecheck attributes");
 			checkAttributes();
+
+			log("\n--> Pass 5: typecheck methods");
+			checkMethods();
 		} catch (Exception ex) {
 			System.err.println("*** Typechecking Failed! ***");
 			ex.printStackTrace();
@@ -240,10 +243,33 @@ public class TypeChecker {
 					check(curClass, attr.node.right);
 					log(MessageFormat.format("Expr type: {0}; Attr type: {1}",
 							attr.node.right.type, attr.node.type));
-					if (!moreGeneralOrEqualTo(attr.node.right.type, attr.node.type))
+					if (!moreGeneralOrEqualTo(attr.node.type, attr.node.right.type))
 						throw new TypeCheckException(MessageFormat.format(
 								"Attribute {0} has value of wrong type: {1}", attr,
 								attr.node.right.type));
+				}
+			}
+		}
+	}
+
+	public void checkMethods() throws Environment.EnvironmentException, TypeCheckException {
+		for (Entry<String, Environment.CoolClass> e : env.classes.entrySet()) {
+			Environment.CoolClass curClass = e.getValue();
+			if (curClass.builtin) {
+				continue;
+			}
+			log(MessageFormat.format("Typechecking methods of class {0}", curClass));
+			for (Entry<String, Environment.CoolMethod> e2 : curClass.methods.entrySet()) {
+				Environment.CoolMethod method = e2.getValue();
+				if (method.node.right != null) {
+					log("Checking method " + method);
+					check(curClass, method.node.right);
+					log(MessageFormat.format("Declared method type: {0}; Method body type: {1}",
+							method.node.right.type, method.node.type));
+					if (!moreGeneralOrEqualTo(method.node.type, method.node.right.type))
+						throw new TypeCheckException(MessageFormat.format(
+								"Method {0} has body of wrong type: {1}", method,
+								method.node.right.type));
 				}
 			}
 		}
@@ -371,8 +397,136 @@ public class TypeChecker {
 				return setType(unionType, node);
 			}
 
+			case sym.SEMI: {
+				// Check the mandatory first expression
+				check(curClass, node.left);
+				Environment.CoolClass lastType = node.left.type;
+
+				// Then check the optional remaining expressions,
+				// if they are present.
+				if (node.right != null) {
+					lastType = checkSequence(curClass, node.right);
+				}
+				return setType(lastType, node);
+			}
+
+			case sym.LET: {
+				int numVars = addLetIntroductions(curClass, node.left, 0);
+				log(MessageFormat
+						.format(
+								"Let expression resulted in {0} variables added to local environment, which is now: {1}",
+								numVars, env.localEnv));
+				check(curClass, node.right);
+				for (int i = 0; i < numVars; ++i) {
+					log("Popping mapping off local environment");
+					env.localEnv.pop();
+				}
+				log(MessageFormat.format("After let evaluated, local environment is {0}",
+						env.localEnv));
+				return setType(node.right.type, node);
+			}
+
+			case sym.CASE: {
+				check(curClass, node.left);
+				Environment.CoolClass leftClass = node.left.type;
+				List<Environment.CoolClass> list = new LinkedList<Environment.CoolClass>();
+				list = getCaseTypes(curClass, node.right, list);
+				Iterator<Environment.CoolClass> iter = list.iterator();
+				Environment.CoolClass caseClass = iter.next();
+				while (iter.hasNext()) {
+					Environment.CoolClass nextClass = iter.next();
+					log(MessageFormat.format("Comparing {0} and {1}", caseClass, nextClass));
+					caseClass = mostSpecificParent(caseClass, nextClass);
+				}
+				log(MessageFormat.format("Union type of case statement is {0}", caseClass));
+				return setType(caseClass, node);
+			}
+
 			default:
 				throw new TypeCheckException("Unimplemented node type: " + Util.idToName(node.kind));
+			}
+		}
+		return null;
+	}
+
+	private List<Environment.CoolClass> getCaseTypes(Environment.CoolClass curClass, ASTnode node,
+			List<Environment.CoolClass> list) throws Environment.EnvironmentException,
+			TypeCheckException {
+		if (node != null) {
+			if (node.kind == sym.SEMI) {
+				getCaseTypes(curClass, node.left, list);
+				getCaseTypes(curClass, node.right, list);
+			} else if (node.kind == sym.RIGHTARROW) {
+				String name = (String) node.left.left.value;
+				Environment.CoolClass type = env.getClass((String) node.left.right.value);
+				env.localEnv.push(name, type);
+				log(MessageFormat.format(
+						"Pushing {0}:{1} onto local environment for CASE branch; localEnv is {2}",
+						name, type, env.localEnv));
+				check(curClass, node.right);
+				env.localEnv.pop();
+				log(MessageFormat.format(
+						"Popping local environment after CASE branch; localEnv is {0}",
+						env.localEnv));
+				list.add(node.right.type);
+			}
+		}
+		return list;
+	}
+
+	private int addLetIntroductions(Environment.CoolClass curClass, ASTnode node, int numVars)
+			throws Environment.EnvironmentException, TypeCheckException {
+
+		if (node != null) {
+			switch (node.kind) {
+			case sym.COMMA:
+				numVars += addLetIntroductions(curClass, node.left, 0);
+				numVars += addLetIntroductions(curClass, node.right, 0);
+				break;
+			case sym.ASSIGN: {
+				numVars += 1;
+				Environment.CoolClass type = env.getClass((String) node.left.right.value);
+				String name = (String) node.left.left.value;
+				Environment.CoolClass actualType = type;
+				if (node.right != null) {
+					check(curClass, node.right);
+					if (!moreGeneralOrEqualTo(type, node.right.type))
+						throw new TypeCheckException(
+								MessageFormat
+										.format(
+												"Assignment in LET introduction to variable of incompatible type (expected {0}; found {1})",
+												type, node.right.type));
+					actualType = node.right.type;
+				}
+				log(MessageFormat
+						.format("Pushing {0}:{1} onto local environment", name, actualType));
+				env.localEnv.push(name, actualType);
+				break;
+			}
+			default:
+				throw new TypeCheckException(MessageFormat.format(
+						"Malformed AST; expected COMMA or ASSIGN to left of LET but found {0}",
+						Util.idToName(node.kind)));
+
+			}
+		}
+
+		return numVars;
+	}
+
+	private Environment.CoolClass checkSequence(Environment.CoolClass curClass, ASTnode node)
+			throws Environment.EnvironmentException, TypeCheckException {
+		if (node != null) {
+			if (node.kind == sym.SEMI) {
+				Environment.CoolClass leftClass = checkSequence(curClass, node.left);
+				Environment.CoolClass rightClass = checkSequence(curClass, node.right);
+				if (rightClass != null)
+					return rightClass;
+				else
+					return leftClass;
+			} else {
+				check(curClass, node);
+				return node.type;
 			}
 		}
 		return null;
@@ -451,11 +605,18 @@ public class TypeChecker {
 	}
 
 	protected Environment.CoolClass lookupAttr(Environment.CoolClass cls, String id) {
+		if (id.equals("self")) {
+			log(MessageFormat.format("SELF is of type{0}", cls));
+			return cls;
+		}
 		log(MessageFormat.format("Looking up attribute {0} in local environment", id));
 		Environment.CoolClass result = env.localEnv.get(id);
 		if (result == null) {
 			log(MessageFormat.format("Looking up attribute {0} in current class {1}", id, cls));
 			result = cls.attributes.get(id).type;
+		} else {
+			log(MessageFormat.format("Attribute {0} found in local environment: ", id, result));
+			return result;
 		}
 		while (result == null && cls != OBJECT) {
 			cls = cls.parent;
@@ -465,7 +626,7 @@ public class TypeChecker {
 		if (result == null) {
 			log(MessageFormat.format("Attribute {0} not found", id));
 		} else {
-			log(MessageFormat.format("Attribute {0} found in class {1}", id, cls));
+			log(MessageFormat.format("Attribute {0} found in class {1}: {2}", id, cls, result));
 		}
 		return result;
 	}
