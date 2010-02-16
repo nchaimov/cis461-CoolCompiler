@@ -10,6 +10,8 @@ public class TypeChecker {
 
 	protected boolean debug;
 
+	final Environment.CoolClass OBJECT;
+
 	public static class TypeCheckException extends Exception {
 		private static final long serialVersionUID = -7774893843820229667L;
 
@@ -22,6 +24,7 @@ public class TypeChecker {
 		this.root = root;
 		this.debug = debug;
 		env = new Environment(debug);
+		OBJECT = env.getClass("Object");
 	}
 
 	public boolean typecheck() {
@@ -111,7 +114,6 @@ public class TypeChecker {
 			TypeCheckException {
 		HashSet<Environment.CoolClass> red = new HashSet<Environment.CoolClass>();
 		HashSet<Environment.CoolClass> green = new HashSet<Environment.CoolClass>();
-		final Environment.CoolClass OBJECT = env.getClass("Object");
 		green.add(OBJECT);
 		Iterator<Entry<String, Environment.CoolClass>> iter = env.classes.entrySet().iterator();
 		boolean isTree = true;
@@ -231,12 +233,16 @@ public class TypeChecker {
 			log(MessageFormat.format("Typechecking attributes of class {0}", curClass));
 			for (Entry<String, Environment.CoolAttribute> e2 : curClass.attributes.entrySet()) {
 				Environment.CoolAttribute attr = e2.getValue();
-				log("Checking attribute " + attr);
-				check(curClass, attr.node.right);
-				if (attr.type != attr.node.right.type)
-					throw new TypeCheckException(MessageFormat.format(
-							"Attribute {0} has value of wrong type: {1}", attr,
-							attr.node.right.type));
+				if (attr.node.right != null) {
+					log("Checking attribute " + attr);
+					check(curClass, attr.node.right);
+					log(MessageFormat.format("Expr type: {0}; Attr type: {1}",
+							attr.node.right.type, attr.node.type));
+					if (!moreGeneralOrEqualTo(attr.node.right.type, attr.node.type))
+						throw new TypeCheckException(MessageFormat.format(
+								"Attribute {0} has value of wrong type: {1}", attr,
+								attr.node.right.type));
+				}
 			}
 		}
 	}
@@ -255,8 +261,36 @@ public class TypeChecker {
 			case sym.STRINGLIT:
 				return setType(env.getClass("String"), node);
 
+				// IDENTIFIER
 			case sym.ID:
 				return setType(lookup(curClass, (String) node.value), node);
+
+				// OPERATORS
+			case sym.ASSIGN: {
+				if (node.left.kind != sym.ID)
+					throw new TypeCheckException(
+							MessageFormat
+									.format(
+											"Left-hand side of an assignment must be an identifier, but {0} found instead",
+											Util.idToName(node.left.kind)));
+				Environment.CoolClass leftType = check(curClass, node.left);
+				Environment.CoolClass rightType = check(curClass, node.right);
+				log(MessageFormat.format(
+						"Assignment: Left-side {0} has type {1}; right-side has type {2}",
+						node.left.value, node.left.type, node.right.type));
+				if (moreGeneralOrEqualTo(leftType, rightType)) {
+					log(MessageFormat.format("Most specific parent in common is {0}",
+							mostSpecificParent(leftType, rightType)));
+					return setType(rightType, node);
+				} else
+					throw new TypeCheckException(MessageFormat.format(
+							"Expression of type {0} not compatible with variable type {1}",
+							node.right.type, node.left.type));
+			}
+
+			case sym.NEW: {
+				return setType(env.getClass((String) node.value), node);
+			}
 
 			default:
 				throw new TypeCheckException("Unimplemented node type: " + Util.idToName(node.kind));
@@ -268,6 +302,32 @@ public class TypeChecker {
 	/*
 	 * UTILITY METHODS
 	 */
+
+	protected boolean moreGeneralOrEqualTo(Environment.CoolClass c1, Environment.CoolClass c2)
+			throws Environment.EnvironmentException {
+		while (c2 != c1 && c2 != OBJECT) {
+			c2 = c2.parent;
+		}
+		return c2 == c1;
+	}
+
+	protected Environment.CoolClass mostSpecificParent(Environment.CoolClass c1,
+			Environment.CoolClass c2) throws Environment.EnvironmentException {
+		HashSet<Environment.CoolClass> alreadySeen = new HashSet<Environment.CoolClass>();
+
+		while (true) {
+			if (alreadySeen.contains(c1) && c1 != OBJECT)
+				return c1;
+			alreadySeen.add(c1);
+			c1 = c1.parent;
+			if (alreadySeen.contains(c2) && c2 != OBJECT)
+				return c2;
+			alreadySeen.add(c2);
+			c2 = c2.parent;
+			if (c1 == c2)
+				return c1;
+		}
+	}
 
 	protected Environment.CoolClass lookup(Environment.CoolClass cls, String id) {
 		Environment.CoolClass result = env.localEnv.get(id);

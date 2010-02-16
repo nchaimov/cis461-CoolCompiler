@@ -5,4 +5,14 @@ class Main {
 	d : String := "This is a string";
 	e : Int := c;
 	f : Int := (c := 5);
+	g : A := new A;
+	h : B := (g := new B);
+};
+
+class A {
+
+};
+
+class B inherits A {
+
 };

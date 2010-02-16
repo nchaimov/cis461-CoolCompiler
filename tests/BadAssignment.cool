@@ -1,0 +1,12 @@
+class A {
+
+};
+
+class B inherits A {
+	
+};
+
+class C {
+	var1 : B;
+	var2 : A := (var1 := new A);
+};
