@@ -6,6 +6,8 @@ class Main {
 				n : C => (n.baz());
 				n : D => (n.foo());
 		esac;
+		
+	main(a : Int) : Int {{ 4; }};
 };
 
 class A { 

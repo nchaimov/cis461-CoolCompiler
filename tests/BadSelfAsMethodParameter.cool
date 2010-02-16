@@ -1,0 +1,3 @@
+class A {
+	foo(a : Int, self : Int) : Int {{ a + self; }};
+};

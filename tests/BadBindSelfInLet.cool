@@ -1,0 +1,3 @@
+class A {
+	a : Object := let self : Object := new A in isvoid self;
+};

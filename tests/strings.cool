@@ -1,0 +1,7 @@
+I am starting a string "right now, and it is going to have \"some quotes and stuff\" in it, maybe even a blackslash like this \\"
+"This string has some special characters in it \n a new line \t a tab \f a form-feed and\b a backspace."
+"This string has some non-special escaped characters like an \a and a \c"
+"This string has an escaped \
+newline."
+"This string has a non-escaped
+newline, which isn't allowed."

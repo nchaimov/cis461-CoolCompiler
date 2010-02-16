@@ -24,7 +24,7 @@ Cool.class:	Cool.java ScanDriver.class parser.class Util.class TypeChecker.class
 ScanDriver.class:	ScanDriver.java coolScanner.java
 	javac -classpath .:$(LIBS) $(JAVACOPT) $< 
 
-Util.java:	sym.java Nodes.java
+Util.java: Nodes.java
 	ruby gen_idToName.rb > Util.java
 
 Util.class: Util.java Environment.class

@@ -47,6 +47,18 @@ public class TypeChecker {
 			log("\n--> Pass 5: typecheck methods");
 			checkMethods();
 
+			if (!env.classes.containsKey("Main")) {
+				System.err.println("\nWARNING: Main class not present");
+			} else {
+				Environment.CoolMethod mainMethod = env.classes.get("Main").methods.get("main");
+				if (mainMethod == null) {
+					System.err.println("\nWARNING: Main class does not contain main() method");
+				} else if (mainMethod.arguments.size() != 0) {
+					System.err
+							.println("\nWARNING: Main class's main() method should not have arguments.");
+				}
+			}
+
 			log("\n--> Typechecking completed!");
 		} catch (Exception ex) {
 			System.err.println("*** Typechecking Failed! ***");
@@ -117,6 +129,7 @@ public class TypeChecker {
 		}
 	}
 
+	// Make sure class hierarchy is a tree
 	protected void checkHierarchyForCycles() throws Environment.EnvironmentException,
 			TypeCheckException {
 		HashSet<Environment.CoolClass> red = new HashSet<Environment.CoolClass>();
@@ -127,14 +140,12 @@ public class TypeChecker {
 		while (iter.hasNext() && isTree) {
 			Entry<String, Environment.CoolClass> entry = iter.next();
 			Environment.CoolClass currClass = entry.getValue();
-			// log("while loop: currClass is " + currClass);
 			while (!green.contains(currClass)) {
 				if (red.contains(currClass))
 					throw new TypeCheckException("Class hierarchy is not a tree.");
 				else {
 					red.add(currClass);
 					currClass = currClass.parent;
-					// log("else: currClass is " + currClass);
 				}
 			}
 			Iterator<Environment.CoolClass> reds = red.iterator();
@@ -145,7 +156,6 @@ public class TypeChecker {
 				green.add(redClass);
 			}
 			red.clear();
-			// log("emptying red");
 		}
 		log("Class hierarchy contains no cycles.");
 	}
@@ -265,7 +275,19 @@ public class TypeChecker {
 				Environment.CoolMethod method = e2.getValue();
 				if (method.node.right != null) {
 					log("Checking method " + method);
+					for (Environment.CoolAttribute a : method.arguments) {
+						log(MessageFormat.format(
+								"Pushing method argument {0} onto local environment", a));
+						env.localEnv.push(a.name, a.type);
+					}
+					log(MessageFormat.format("Local environment is {0}", env.localEnv));
 					check(curClass, method.node.right);
+					for (@SuppressWarnings("unused")
+					Environment.CoolAttribute a : method.arguments) {
+						log("Popping local environment");
+						env.localEnv.pop();
+					}
+					log(MessageFormat.format("Local environment is {0}", env.localEnv));
 					log(MessageFormat.format("Declared method type: {0}; Method body type: {1}",
 							method.node.right.type, method.node.type));
 					if (!moreGeneralOrEqualTo(method.node.type, method.node.right.type))
@@ -303,6 +325,9 @@ public class TypeChecker {
 									.format(
 											"Left-hand side of an assignment must be an identifier, but {0} found instead",
 											Util.idToName(node.left.kind)));
+				if (node.left.value.equals("self"))
+					throw new TypeCheckException(
+							"The special variable 'self' cannot be assigned to.");
 				Environment.CoolClass leftType = check(curClass, node.left);
 				Environment.CoolClass rightType = check(curClass, node.right);
 				log(MessageFormat.format(
@@ -430,7 +455,6 @@ public class TypeChecker {
 
 			case sym.CASE: {
 				check(curClass, node.left);
-				Environment.CoolClass leftClass = node.left.type;
 				List<Environment.CoolClass> list = new LinkedList<Environment.CoolClass>();
 				list = getCaseTypes(curClass, node.right, list);
 				Iterator<Environment.CoolClass> iter = list.iterator();
@@ -542,6 +566,9 @@ public class TypeChecker {
 				getCaseTypes(curClass, node.right, list);
 			} else if (node.kind == sym.RIGHTARROW) {
 				String name = (String) node.left.left.value;
+				if (name.equals("self"))
+					throw new TypeCheckException(
+							"The special variable 'self' cannot be bound in a case statement.");
 				Environment.CoolClass type = env.getClass((String) node.left.right.value);
 				env.localEnv.push(name, type);
 				log(MessageFormat.format(
@@ -571,6 +598,9 @@ public class TypeChecker {
 				numVars += 1;
 				Environment.CoolClass type = env.getClass((String) node.left.right.value);
 				String name = (String) node.left.left.value;
+				if (name.equals("self"))
+					throw new TypeCheckException(
+							"The special variable 'self' cannot be bound in a let expression.");
 				Environment.CoolClass actualType = type;
 				if (node.right != null) {
 					check(curClass, node.right);

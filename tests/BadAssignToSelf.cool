@@ -1,0 +1,3 @@
+class A {
+	foo() : Object {{ self := new A; }};
+};

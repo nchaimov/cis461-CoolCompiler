@@ -121,6 +121,12 @@ public class Environment {
 		if (c.methods.containsKey(m.name))
 			throw new EnvironmentException(MessageFormat.format(
 					"Attempting to define method already defined: {0} (in class {1})", m, c));
+		for (CoolAttribute a : m.arguments) {
+			if (a.name.equals("self"))
+				throw new EnvironmentException(
+						"The reserved name 'self' cannot be used as the name of a method parameter");
+		}
+
 		CoolClass parent = c.parent;
 		while (parent != getClass("Object")) {
 			if (parent.methods.containsKey(m.name)) {
@@ -153,6 +159,16 @@ public class Environment {
 		if (c.attributes.containsKey(m.name))
 			throw new EnvironmentException(MessageFormat.format(
 					"Attempting to define attribute already defined: {0} (in class {1})", m, c));
+		CoolClass parent = c.parent;
+		while (parent != getClass("Object")) {
+			if (parent.attributes.containsKey(m.name))
+				throw new EnvironmentException(
+						MessageFormat
+								.format(
+										"Attempting to define attribute {0} in class {1}, but already defined in a superclass {2}",
+										m.name, c, parent));
+			parent = parent.parent;
+		}
 		log(MessageFormat.format("Adding attribute {0} to class {1}", m, c));
 		c.attributes.put(m.name, m);
 	}

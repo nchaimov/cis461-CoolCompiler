@@ -1,0 +1,7 @@
+class A {
+	b : Int := 1;
+	a : Object := case b of
+			n : Int => (4);
+			self : Bool => (10);
+		esac;
+};
