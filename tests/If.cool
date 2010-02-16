@@ -1,0 +1,16 @@
+class Main {
+    a : Bool := true;
+	b : A := if a then new B else new C fi;
+};
+
+class A {
+	
+};
+
+class B inherits A {
+	
+};
+
+class C inherits A {
+	
+};

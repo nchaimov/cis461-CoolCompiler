@@ -1,6 +1,10 @@
 class Foo {
-	doh(var1 : Int, var2 : Int) : Int { {var1 + 2 + var2;} };
+	doh(var1 : Int, var2 : Int, var3 : Int) : Int { {var1 + (moo - var3) + var2;} };
 	moo : Int := 2;
-	blorf : Int := doh(4);
+	foo : Bar := new Foo;
+	blorf : Int := foo@Foo.doh(4, 7, 10);
 };
 
+class Bar inherits Foo {
+	
+};

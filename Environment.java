@@ -121,7 +121,7 @@ public class Environment {
 			throw new EnvironmentException(MessageFormat.format(
 					"Attempting to define method already defined: {0} (in class {1})", m, c));
 		log(MessageFormat.format("Adding method {0} to class {1} ({2})", m, c, m.getName()));
-		c.methods.put(m.getName(), m);
+		c.methods.put(m.name, m);
 	}
 
 	public void addAttribute(CoolClass c, CoolAttribute m) throws EnvironmentException {
