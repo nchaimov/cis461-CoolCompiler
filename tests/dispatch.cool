@@ -1,7 +1,7 @@
 class Foo {
 	doh(var1 : Int, var2 : Int, var3 : Int) : Int { {var1 + (moo - var3) + var2;} };
 	moo : Int := 2;
-	foo : Bar := new Foo;
+	foo : Foo := new Foo;
 	blorf : Int := foo@Foo.doh(4, 7, 10);
 };
 
