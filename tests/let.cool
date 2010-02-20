@@ -1,4 +1,6 @@
 class Main {
 	b : Int := let x : Int := 1 in x;
 	a : Int := let x : Int := 4, y : Bool := false, z : Int in if y then x else (z := 1) fi;
+	c : Object := let x : Int in let x : Bool in let x : String in x;
+	d : Int := let x : Object, x : Bool := true, x : String := "String!", x : Int := 2 in x;
 };
