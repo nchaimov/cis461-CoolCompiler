@@ -22,10 +22,12 @@ public class Cool {
 
 	private static final String PARSE_DEBUG_OPTION = "dp";
 	private static final String TYPECHECK_DEBUG_OPTION = "dt";
+	private static final String CODEGEN_DEBUG_OPTION = "dc";
 	private static final String PRINT_TREE_OPTION = "t";
 
 	boolean debugParser = false; // True => parse in debug mode
 	boolean debugTypeChecker = false;
+	boolean debugCodegen = false;
 	boolean printTree = false;
 
 	static public void main(String args[]) {
@@ -52,6 +54,7 @@ public class Cool {
 			debugParser = cmd.hasOption(PARSE_DEBUG_OPTION);
 			printTree = cmd.hasOption(PRINT_TREE_OPTION);
 			debugTypeChecker = cmd.hasOption(TYPECHECK_DEBUG_OPTION);
+			debugCodegen = cmd.hasOption(CODEGEN_DEBUG_OPTION);
 			String[] remaining = cmd.getArgs();
 			int argc = remaining.length;
 			if (argc == 0) {
@@ -91,11 +94,15 @@ public class Cool {
 			if (printTree) {
 				tree.dump();
 			}
+			System.err.println("Beginning code generation...");
+			CodeGenerator codeGenerator = new CodeGenerator(typeChecker.getEnvironment(),
+					debugCodegen);
+			codeGenerator.generateCode();
+			System.err.println("Done generating code");
 		} catch (Exception e) {
 			System.err.println("Yuck, blew up in parse/validate phase");
 			e.printStackTrace();
 			System.exit(1);
 		}
 	}
-
 }
