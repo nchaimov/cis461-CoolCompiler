@@ -152,8 +152,7 @@ public class TypeChecker {
 		green.add(OBJECT);
 		final Iterator<Entry<String, Environment.CoolClass>> iter = env.classes.entrySet()
 				.iterator();
-		final boolean isTree = true;
-		while (iter.hasNext() && isTree) {
+		while (iter.hasNext()) {
 			final Entry<String, Environment.CoolClass> entry = iter.next();
 			Environment.CoolClass currClass = entry.getValue();
 			while (!green.contains(currClass)) {
@@ -295,16 +294,16 @@ public class TypeChecker {
 					for (final Environment.CoolAttribute a : method.arguments) {
 						log(MessageFormat.format(
 								"Pushing method argument {0} onto local environment", a));
-						env.localEnv.push(a.name, a.type);
+						env.localTypes.push(a.name, a.type);
 					}
-					log(MessageFormat.format("Local environment is {0}", env.localEnv));
+					log(MessageFormat.format("Local environment is {0}", env.localTypes));
 					check(curClass, method.node.right);
 					for (@SuppressWarnings("unused")
 					final Environment.CoolAttribute a : method.arguments) {
 						log("Popping local environment");
-						env.localEnv.pop();
+						env.localTypes.pop();
 					}
-					log(MessageFormat.format("Local environment is {0}", env.localEnv));
+					log(MessageFormat.format("Local environment is {0}", env.localTypes));
 					log(MessageFormat.format("Declared method type: {0}; Method body type: {1}",
 							method.node.right.type, method.node.type));
 					if (!moreGeneralOrEqualTo(method.node.type, method.node.right.type))
@@ -332,7 +331,7 @@ public class TypeChecker {
 
 				// IDENTIFIER
 			case sym.ID:
-				return setType(lookupAttr(curClass, (String) node.value), node);
+				return setType(env.lookupAttrType(curClass, (String) node.value), node);
 
 				// OPERATORS
 			case sym.ASSIGN: {
@@ -395,7 +394,7 @@ public class TypeChecker {
 
 				log(MessageFormat.format("Looking up method {0} in {1}", node.value,
 						containingClass));
-				final Environment.CoolMethod method = lookupMethod(containingClass,
+				final Environment.CoolMethod method = env.lookupMethod(containingClass,
 						(String) node.value);
 				if (method == null)
 					throw new TypeCheckException(MessageFormat.format(
@@ -461,14 +460,14 @@ public class TypeChecker {
 				log(MessageFormat
 						.format(
 								"Let expression resulted in {0} variables added to local environment, which is now: {1}",
-								numVars, env.localEnv));
+								numVars, env.localTypes));
 				check(curClass, node.right);
 				for (int i = 0; i < numVars; ++i) {
 					log("Popping mapping off local environment");
-					env.localEnv.pop();
+					env.localTypes.pop();
 				}
 				log(MessageFormat.format("After let evaluated, local environment is {0}",
-						env.localEnv));
+						env.localTypes));
 				return setType(node.right.type, node);
 			}
 
@@ -583,15 +582,15 @@ public class TypeChecker {
 					throw new TypeCheckException(
 							"The special variable 'self' cannot be bound in a case statement.");
 				final Environment.CoolClass type = env.getClass((String) node.left.right.value);
-				env.localEnv.push(name, type);
+				env.localTypes.push(name, type);
 				log(MessageFormat.format(
 						"Pushing {0}:{1} onto local environment for CASE branch; localEnv is {2}",
-						name, type, env.localEnv));
+						name, type, env.localTypes));
 				check(curClass, node.right);
-				env.localEnv.pop();
+				env.localTypes.pop();
 				log(MessageFormat.format(
 						"Popping local environment after CASE branch; localEnv is {0}",
-						env.localEnv));
+						env.localTypes));
 				list.add(node.right.type);
 			}
 		}
@@ -627,7 +626,7 @@ public class TypeChecker {
 				}
 				log(MessageFormat
 						.format("Pushing {0}:{1} onto local environment", name, actualType));
-				env.localEnv.push(name, actualType);
+				env.localTypes.push(name, actualType);
 				break;
 			}
 			default:
@@ -713,57 +712,6 @@ public class TypeChecker {
 			if (c1 == c2)
 				return c1;
 		}
-	}
-
-	protected Environment.CoolMethod lookupMethod(Environment.CoolClass cls, final String id) {
-		Environment.CoolMethod result = cls.methods.get(id);
-		while (result == null && cls != OBJECT) {
-			log(MessageFormat
-					.format("Method {2} not found in {0}; trying {1}", cls, cls.parent, id));
-			cls = cls.parent;
-			result = cls.methods.get(id);
-		}
-		if (result == null) {
-			log(MessageFormat.format("Method {0} not found", id));
-		} else {
-			log(MessageFormat.format("Method {0} found in {1}", id, cls));
-		}
-		return result;
-	}
-
-	protected Environment.CoolClass lookupAttr(Environment.CoolClass cls, final String id)
-			throws TypeCheckException {
-		if (id.equals("self")) {
-			log(MessageFormat.format("SELF is of type{0}", cls));
-			return cls;
-		}
-		log(MessageFormat.format("Looking up attribute {0} in local environment", id));
-		Environment.CoolClass result = env.localEnv.get(id);
-		if (result == null) {
-			log(MessageFormat.format("Looking up attribute {0} in current class {1}", id, cls));
-			if (cls.attributes.get(id) != null) {
-				result = cls.attributes.get(id).type;
-			}
-		} else {
-			log(MessageFormat.format("Attribute {0} found in local environment: ", id, result));
-			return result;
-		}
-		while (result == null && cls != OBJECT) {
-			cls = cls.parent;
-			log(MessageFormat.format("Looking up attribute {0} in class {1}", id, cls));
-			if (cls.attributes.get(id) != null) {
-				result = cls.attributes.get(id).type;
-			}
-		}
-		if (result == null) {
-			log(MessageFormat.format("Attribute {0} not found", id));
-			throw new TypeCheckException(MessageFormat.format(
-					"Attribute {0} referenced but not defined", id));
-		} else {
-			log(MessageFormat.format("Attribute {0} found in class {1}: {2}", id, cls, result));
-		}
-
-		return result;
 	}
 
 	protected Environment.CoolClass setType(final Environment.CoolClass cls, final ASTnode node) {

@@ -49,6 +49,7 @@ public class Cool {
 			options.addOption(PRINT_TREE_OPTION, false,
 					"output abstract syntax tree in graphviz format");
 			options.addOption(TYPECHECK_DEBUG_OPTION, false, "typechecker debug mode");
+			options.addOption(CODEGEN_DEBUG_OPTION, false, "code generator debug mode");
 			CommandLineParser cliParser = new GnuParser();
 			CommandLine cmd = cliParser.parse(options, args);
 			debugParser = cmd.hasOption(PARSE_DEBUG_OPTION);
@@ -87,18 +88,27 @@ public class Cool {
 			}
 			System.err.println("Done parsing");
 			ASTnode tree = (ASTnode) result.value;
+			if (tree == null) {
+				System.err.println("*** Parsing failed!");
+				System.exit(3);
+			}
 			System.err.println("Beginning typecheck...");
 			TypeChecker typeChecker = new TypeChecker(tree, debugTypeChecker);
-			typeChecker.typecheck();
-			System.err.println("Done typechecking");
-			if (printTree) {
-				tree.dump();
+			if (typeChecker.typecheck()) {
+				System.err.println("Done typechecking");
+				if (printTree) {
+					tree.dump();
+				} else {
+					System.err.println("Beginning code generation...");
+					CodeGenerator codeGenerator = new CodeGenerator(typeChecker.getEnvironment(),
+							debugCodegen);
+					final String code = codeGenerator.generateCode();
+					System.err.println("Done generating code\n\n");
+					System.out.println(code);
+				}
+			} else {
+				System.exit(2);
 			}
-			System.err.println("Beginning code generation...");
-			CodeGenerator codeGenerator = new CodeGenerator(typeChecker.getEnvironment(),
-					debugCodegen);
-			codeGenerator.generateCode();
-			System.err.println("Done generating code");
 		} catch (Exception e) {
 			System.err.println("Yuck, blew up in parse/validate phase");
 			e.printStackTrace();

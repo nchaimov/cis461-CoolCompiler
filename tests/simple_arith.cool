@@ -1,4 +1,7 @@
-class Main {
+class Main inherits IO {
 	a : Int := ((1 + 2) + 4 - (2 * 10))/2;
 	b : Int := ~3;
+	c : Int := a + b;
+	
+	main() : Object {{ b := b - 4; c := c + 1; out_int(c); }};
 };
