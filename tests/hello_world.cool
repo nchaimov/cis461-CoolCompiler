@@ -1,3 +1,11 @@
-class Main inherits IO {
-	main() : Object {{ self@IO.out_string("Hello world!"); }};
+class Q inherits IO {
+	c : String := "\"Meow\", said the cat.\n";
+	outC() : Object {{ out_string(c); }};
+};
+
+class Main inherits Q {
+	a : String := "Hello world!\n";
+	b : Int := (2 + ((3 + 10) * 4) - 4) / 10;
+	getA() : String {{ outC(); a; }};
+	main() : Object {{ self@IO.out_string(getA()); out_int(b); out_string("\n"); }};
 };

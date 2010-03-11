@@ -24,11 +24,13 @@ public class Cool {
 	private static final String TYPECHECK_DEBUG_OPTION = "dt";
 	private static final String CODEGEN_DEBUG_OPTION = "dc";
 	private static final String PRINT_TREE_OPTION = "t";
+	private static final String SHOW_GENERATED_CODE = "s";
 
 	boolean debugParser = false; // True => parse in debug mode
 	boolean debugTypeChecker = false;
 	boolean debugCodegen = false;
 	boolean printTree = false;
+	boolean showCode = false;
 
 	static public void main(String args[]) {
 		Cool cool = new Cool();
@@ -50,12 +52,14 @@ public class Cool {
 					"output abstract syntax tree in graphviz format");
 			options.addOption(TYPECHECK_DEBUG_OPTION, false, "typechecker debug mode");
 			options.addOption(CODEGEN_DEBUG_OPTION, false, "code generator debug mode");
+			options.addOption(SHOW_GENERATED_CODE, false, "show generated code");
 			CommandLineParser cliParser = new GnuParser();
 			CommandLine cmd = cliParser.parse(options, args);
 			debugParser = cmd.hasOption(PARSE_DEBUG_OPTION);
 			printTree = cmd.hasOption(PRINT_TREE_OPTION);
 			debugTypeChecker = cmd.hasOption(TYPECHECK_DEBUG_OPTION);
 			debugCodegen = cmd.hasOption(CODEGEN_DEBUG_OPTION);
+			showCode = cmd.hasOption(SHOW_GENERATED_CODE);
 			String[] remaining = cmd.getArgs();
 			int argc = remaining.length;
 			if (argc == 0) {
@@ -105,6 +109,9 @@ public class Cool {
 					final String code = codeGenerator.generateCode();
 					System.err.println("Done generating code\n\n");
 					System.out.println(code);
+					if (showCode) {
+						System.err.println(code);
+					}
 				}
 			} else {
 				System.exit(2);

@@ -33,6 +33,7 @@ public class Environment {
 		public List<CoolAttribute> attrList = new LinkedList<CoolAttribute>();
 		public ASTnode node;
 		public boolean builtin = false;
+		public boolean inheritDone = false;
 
 		public CoolClass(final String name) {
 			this(name, null);
@@ -79,7 +80,7 @@ public class Environment {
 		public String getInternalType() {
 			final StringBuilder sb = new StringBuilder();
 			sb.append(type.getInternalInstanceName());
-			sb.append("* (%any *");
+			sb.append("* (").append(parent.getInternalInstanceName()).append(" *");
 			for (CoolAttribute arg : arguments) {
 				sb.append(", ");
 				sb.append(arg.type.getInternalInstanceName());
@@ -136,7 +137,7 @@ public class Environment {
 	public HashMap<String, CoolClass> classes = new HashMap<String, CoolClass>();
 
 	public HashStack<String, CoolClass> localTypes = new HashStack<String, CoolClass>();
-	public HashStack<String, String> localNames = new HashStack<String, String>();
+	public HashStack<String, CodeGenerator.Register> registers = new HashStack<String, CodeGenerator.Register>();
 
 	public Environment() throws EnvironmentException {
 		this(false);
@@ -215,7 +216,16 @@ public class Environment {
 				+ "\t%tmp1 = getelementptr inbounds %__instance_String * %tmp, i32 0, i32 2\n"
 				+ "\t%tmp2 = load i8** %tmp1\n"
 				+ "\t%call = call i32 (i8*, ...)* @printf(i8* getelementptr inbounds ([3 x i8]* @str.format, i32 0, i32 0), i8* %tmp2)\n"
-				+ "\t%retval = bitcast %any * %this to %__instance_Object *\n"
+				+ "\t%retval = bitcast %__instance_IO * %this to %__instance_Object *\n"
+				+ "\tret %__instance_Object * %retval";
+
+		outInt.builtinImplementation = "\t%v1.addr = alloca %__instance_Int *\n"
+				+ "\tstore %__instance_Int * %v1, %__instance_Int ** %v1.addr\n"
+				+ "\t%tmp = load %__instance_Int** %v1.addr\n"
+				+ "\t%tmp1 = getelementptr inbounds %__instance_Int * %tmp, i32 0, i32 1\n"
+				+ "\t%tmp2 = load i32* %tmp1\n"
+				+ "\t%call = call i32 (i8*, ...)* @printf(i8* getelementptr inbounds ([3 x i8]* @str.format2, i32 0, i32 0), i32 %tmp2)\n"
+				+ "\t%retval = bitcast %__instance_IO * %this to %__instance_Object *\n"
 				+ "\tret %__instance_Object * %retval";
 
 		log("Done setting up default environment");

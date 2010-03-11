@@ -51,8 +51,11 @@ public class TypeChecker {
 			log("\n--> Checking inheritance hierarchy for cycles...");
 			checkHierarchyForCycles();
 
-			log("\n--> Pass 3: identifying attributes and methods");
+			log("\n--> Pass 3a: identifying attributes and methods");
 			this.getMethodsAndAttributes();
+
+			log("\n--> Pass 3b: dealing with attribute inheritance");
+			inheritAttributes();
 
 			log("\n--> Pass 4: typecheck attributes");
 			checkAttributes();
@@ -226,6 +229,40 @@ public class TypeChecker {
 				throw new TypeCheckException(
 						"Malformed AST; METHOD, ATTRIBUTE, or SEMI expected, but found"
 								+ Util.idToName(node.kind));
+			}
+		}
+	}
+
+	private void inheritAttributes() {
+		for (Environment.CoolClass c : env.classes.values()) {
+			inheritAttributes(c);
+		}
+	}
+
+	private void inheritAttributes(Environment.CoolClass c) {
+		if (!c.inheritDone && c != OBJECT) {
+			log("Checking " + c);
+			inheritAttributes(c.parent);
+			LinkedList<Environment.CoolClass> q = new LinkedList<Environment.CoolClass>();
+			q.push(c);
+			Environment.CoolClass p = c.parent;
+			while (p != OBJECT) {
+				q.push(p);
+				p = p.parent;
+			}
+			while (!q.isEmpty()) {
+				Environment.CoolClass curClass = q.pop();
+				for (Environment.CoolAttribute a : curClass.attributes.values()) {
+					log("Found attribute " + a + " of " + curClass + " for " + c);
+					c.attrList.add(a);
+				}
+			}
+			c.inheritDone = true;
+		}
+		log("Class: " + c);
+		if (debug) {
+			for (Environment.CoolAttribute a : c.attrList) {
+				System.err.println("In " + c + " is " + a);
 			}
 		}
 	}

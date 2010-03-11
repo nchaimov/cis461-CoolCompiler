@@ -1,5 +1,5 @@
 import java.text.MessageFormat;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -28,9 +28,13 @@ public class CodeGenerator {
 
 		public String derefType() throws CodeGenerationException {
 			if (type.endsWith("*"))
-				return type.substring(0, type.length() - 2);
+				return type.substring(0, type.length() - 1);
 			else
 				throw new CodeGenerationException("Can't dereference a non-pointer.");
+		}
+
+		public String typeAndName() {
+			return type + " " + name;
 		}
 
 		@Override
@@ -71,20 +75,28 @@ public class CodeGenerator {
 		return "%i" + id++;
 	}
 
+	public Register nextRegister(String type) {
+		return new Register(nextID(), type);
+	}
+
 	public String generateCode() {
 		output = new StringBuilder();
 		id = 0;
 		try {
 
 			output.append("@str.format = private constant [3 x i8] c\"%s\\00\"\n");
+			output.append("@str.format2 = private constant [3 x i8] c\"%d\\00\"\n");
 
 			log("\n--> Generating class descriptors...");
 			generateClassDescriptors();
 			log("\n--> Generating functions...");
 			generateFunctions();
+			log("\n--> Generating main function...");
+			writeMainFunction();
 
 			output.append("\ndeclare i32 @printf(i8* noalias, ...)\n");
-			output.append("\ndeclare noalias i8* @GC_malloc(i64)\n");
+			output.append("declare noalias i8* @GC_malloc(i64)\n");
+			output.append("declare void @GC_init()\n\n");
 		} catch (Exception ex) {
 			System.err.println("*** Code generation failed!");
 			ex.printStackTrace();
@@ -96,7 +108,6 @@ public class CodeGenerator {
 
 	protected void generateClassDescriptors() {
 		output.append("@emptychar = global i8 0\n");
-		output.append("%any = type opaque\n");
 		for (Environment.CoolClass c : env.classes.values()) {
 			StringBuilder b = new StringBuilder();
 			b.append(c.getInternalClassName());
@@ -127,19 +138,10 @@ public class CodeGenerator {
 				b.append(", i1");
 			}
 
-			Environment.CoolClass p = c;
-			while (p != OBJECT) {
-				index = 1;
-				for (Environment.CoolAttribute a : p.attributes.values()) {
-					c.attrList.add(a);
-					if (p == c) {
-						a.index = index++;
-					}
-					b.append(", ");
-					b.append(a.type.getInternalInstanceName());
-					b.append("*");
-				}
-				p = p.parent;
+			for (Environment.CoolAttribute a : c.attrList) {
+				b.append(", ");
+				b.append(a.type.getInternalInstanceName());
+				b.append("*");
 			}
 			b.append(" }\n");
 
@@ -180,7 +182,7 @@ public class CodeGenerator {
 				output.append(m.type.getInternalInstanceName());
 				output.append(" * ");
 				output.append(m.getInternalName());
-				output.append("(%any * %this");
+				output.append("(").append(m.parent.getInternalInstanceName()).append(" * %this");
 				int index = 1;
 				for (Environment.CoolAttribute a : m.arguments) {
 					a.index = index++;
@@ -193,7 +195,8 @@ public class CodeGenerator {
 				if (m.builtinImplementation != null) {
 					output.append(m.builtinImplementation);
 				} else {
-					generateFunctionBody(c, m);
+					Register r = new Register("%this", m.parent.getInternalInstanceName() + "*");
+					generateFunctionBody(c, r, m);
 				}
 				output.append("\n}\n\n");
 			}
@@ -201,30 +204,28 @@ public class CodeGenerator {
 
 	}
 
-	protected void generateFunctionBody(Environment.CoolClass cls, Environment.CoolMethod m)
-			throws CodeGenerationException, Environment.EnvironmentException {
+	protected void generateFunctionBody(Environment.CoolClass cls, Register thiz,
+			Environment.CoolMethod m) throws CodeGenerationException,
+			Environment.EnvironmentException {
 		if (m.node != null) {
 			if (m.node.kind != Nodes.METHOD)
 				throw new CodeGenerationException(MessageFormat.format(
 						"Methods must start with a METHOD node, but found {0} instead.", Util
 								.idToName(m.node.kind)));
 			log(MessageFormat.format("Generating function body for {0} of {1}", m, cls));
-			final Register returnValue = generate(cls, m.node.right);
-			output.append("\tret ");
-			output.append(m.type.getInternalInstanceName());
-			output.append(" * ");
-			output.append(returnValue);
+			Register body = generate(cls, thiz, m.node.right);
+			output.append("\tret ").append(body.typeAndName()).append("\n");
 		}
 	}
 
-	protected Register generate(Environment.CoolClass cls, ASTnode n)
+	protected Register generate(Environment.CoolClass cls, Register thiz, ASTnode n)
 			throws CodeGenerationException, Environment.EnvironmentException {
 		if (n != null) {
 			switch (n.kind) {
 
 			case sym.SEMI: {
-				final Register leftVar = generate(cls, n.left);
-				final Register rightVar = generate(cls, n.right);
+				final Register leftVar = generate(cls, thiz, n.left);
+				final Register rightVar = generate(cls, thiz, n.right);
 				if (rightVar == null)
 					return leftVar;
 				else
@@ -232,219 +233,366 @@ public class CodeGenerator {
 			}
 
 			case sym.DOT: {
-				Environment.CoolClass searchClass = cls;
+				Register id = thiz;
+				if (n.left != null) {
+					id = generate(cls, thiz, n.left);
+				}
+
+				Environment.CoolClass curClass = cls;
 				if (n.center != null) {
-					searchClass = env.getClass((String) n.center.value);
+					curClass = env.getClass((String) n.center.value);
 				}
-				Environment.CoolMethod m = env.lookupMethod(searchClass, (String) n.value);
-				log(MessageFormat.format("Method {0} of class {1} is at index {2} of {3}", m,
-						searchClass, m.index, m.parent));
-				final Register resultLoc = stackAlloc(m.type, "return value");
-				final List<Register> argAddrs = new ArrayList<Register>(m.arguments.size());
-				for (Environment.CoolAttribute a : m.arguments) {
-					argAddrs.add(stackAlloc(a.type, a.toString()));
+
+				List<Register> mArgs = processMethodArgs(cls, thiz, n.right);
+				List<Register> args = new LinkedList<Register>();
+
+				Environment.CoolMethod method = env.lookupMethod(cls, (String) n.value);
+				log("Will call method " + method + " at index " + method.index + " of "
+						+ method.parent);
+
+				int i = 0;
+				for (Register r : mArgs) {
+					final String desiredType = method.arguments.get(i).type
+							.getInternalInstanceName()
+							+ "*";
+					final String actualType = r.type;
+					if (!desiredType.equals(actualType)) {
+						if (actualType.startsWith(desiredType)) {
+							Register q = load(r);
+							args.add(q);
+						}
+					} else {
+						args.add(r);
+					}
+
 				}
-				final List<Register> argVals = processMethodArgs(cls, n.right);
-				return resultLoc;
+
+				Register methodPtr = getElementPtr(new Register(method.parent
+						.getInternalDescriptorName(), method.parent.getInternalClassName() + "*"),
+						method.getInternalType() + "*", 0, method.index);
+				Register methodInst = load(methodPtr);
+
+				Register cast = bitcast(id, method.parent.getInternalInstanceName() + "*");
+
+				output.append("\t; calling method ").append(method).append("\n");
+				Register call = call(methodInst, cast, method.type.getInternalInstanceName() + "*",
+						args);
+
+				return call;
+			}
+
+			case sym.ID: {
+				if (n.value.equals("self"))
+					return thiz;
+				Register local = env.registers.get((String) n.value);
+				if (local != null)
+					return local;
+				Environment.CoolClass curClass = cls;
+				Environment.CoolAttribute a = null;
+				while (a == null && curClass != OBJECT) {
+					a = curClass.attributes.get(n.value);
+					curClass = curClass.parent;
+				}
+				int index = cls.attrList.indexOf(a) + 1;
+				log("Attribute " + a + " is at index " + index + " of class " + a.parent);
+				Register idPtr = getElementPtr(thiz, a.type.getInternalInstanceName() + "**", 0,
+						index);
+				Register idInst = load(idPtr);
+				return idInst;
 			}
 
 			case sym.STRINGLIT: {
-				final Register strId = heapAlloc(STRING, "string literal");
-				instantiateObject(STRING, strId);
-				break;
+				Register str = instantiate(STRING);
+				Register strP = load(str);
+				setString(strP, (String) n.value);
+				return str;
+			}
+
+			case sym.INTLIT: {
+				Register i = instantiate(INT);
+				Register iP = load(i);
+				setInt(iP, Integer.parseInt((String) n.value));
+				return i;
+			}
+
+			case sym.TRUE: {
+				Register b = instantiate(BOOL);
+				Register bP = load(b);
+				setBool(bP, true);
+				return b;
+			}
+
+			case sym.FALSE: {
+				Register b = instantiate(BOOL);
+				return b;
+			}
+
+			case sym.PLUS:
+			case sym.MINUS:
+			case sym.TIMES:
+			case sym.DIV: {
+				Register arg1 = generate(cls, thiz, n.left);
+				Register arg2 = generate(cls, thiz, n.right);
+				output.append("\t; *****************************\n");
+				Register result = intOpt(n.kind, arg1, arg2);
+				output.append("\t; *****************************\n");
+				return result;
 			}
 
 			default:
-				throw new CodeGenerationException("Unknown node type found in AST: "
-						+ Util.idToName(n.kind));
+				if (debug) {
+					log("Unknown node type found in AST:" + Util.idToName(n.kind));
+				} else
+					throw new CodeGenerationException("Unknown node type found in AST: "
+							+ Util.idToName(n.kind));
 			}
 		}
 		return null;
 	}
 
-	public Register getElementPtr(Register in, int... indexes) {
-		return null;
+	private Register intOpt(int kind, Register r1, Register r2) throws CodeGenerationException,
+			Environment.EnvironmentException {
+		Register result = instantiate(INT);
+		Register resInst = load(result);
+
+		Register r1Inst = load(r1);
+		Register r1IntPtr = getElementPtr(r1Inst, "i32 *", 0, 1);
+
+		Register r2Inst = load(r2);
+		Register r2IntPtr = getElementPtr(r2Inst, "i32 *", 0, 1);
+
+		Register r1Int = load(r1IntPtr);
+		Register r2Int = load(r2IntPtr);
+
+		Register temp = nextRegister("i32");
+		switch (kind) {
+		case sym.PLUS:
+			output.append("\t").append(temp.name).append(" = add ").append(r1Int.typeAndName())
+					.append(", ").append(r2Int.name).append("\n");
+			break;
+		case sym.MINUS:
+			output.append("\t").append(temp.name).append(" = sub ").append(r1Int.typeAndName())
+					.append(", ").append(r2Int.name).append("\n");
+			break;
+		case sym.TIMES:
+			output.append("\t").append(temp.name).append(" = mul ").append(r1Int.typeAndName())
+					.append(", ").append(r2Int.name).append("\n");
+			break;
+		case sym.DIV:
+			output.append("\t").append(temp.name).append(" = sdiv ").append(r1Int.typeAndName())
+					.append(", ").append(r2Int.name).append("\n");
+			break;
+		}
+
+		Register resultIntPtr = getElementPtr(resInst, "i32 *", 0, 1);
+		store(temp, resultIntPtr);
+
+		return result;
 	}
 
-	protected Register heapAlloc(Environment.CoolClass cls, String comment) {
-		final Register reg = stackAlloc(cls, comment != null ? comment + "(start)" : "start", 1);
-
-		String size = nextID();
-		String size2 = nextID();
-
-		output.append("\t");
-		output.append(size).append(" = getelementptr ").append(cls.getInternalInstanceName());
-		output.append(" * null, i64 1\n");
-
-		output.append("\t");
-		output.append(size2).append(" = ptrtoint ").append(cls.getInternalInstanceName());
-		output.append(" * ").append(size).append(" to i64\n");
-
-		String call = nextID();
-
-		output.append("\t").append(call);
-		output.append(" = call noalias i8* @GC_malloc(i64 ").append(size2).append(")\n");
-
-		String conv = nextID();
-
-		output.append("\t");
-		output.append(conv).append(" = bitcast i8 * ").append(call).append(" to ").append(
-				cls.getInternalInstanceName());
-		output.append(" *\n");
-
-		output.append("\tstore ").append(cls.getInternalInstanceName()).append(" * ").append(conv);
-		output.append(", ").append(cls.getInternalInstanceName()).append(" ** ").append(reg.name)
-				.append("\n");
-
-		return reg;
-	}
-
-	protected List<Register> processMethodArgs(Environment.CoolClass cls, ASTnode n)
+	private List<Register> processMethodArgs(Environment.CoolClass cls, Register thiz, ASTnode n)
 			throws CodeGenerationException, Environment.EnvironmentException {
-		return processMethodArgs(cls, n, new LinkedList<Register>());
+		return processMethodArgs(cls, thiz, n, new LinkedList<Register>());
 	}
 
-	protected List<Register> processMethodArgs(Environment.CoolClass cls, ASTnode n,
+	private List<Register> processMethodArgs(Environment.CoolClass cls, Register thiz, ASTnode n,
 			List<Register> l) throws CodeGenerationException, Environment.EnvironmentException {
 		if (n != null) {
-			if (n.kind == sym.COMMA) {
-				processMethodArgs(cls, n.left, l);
-				processMethodArgs(cls, n.right, l);
-			} else {
-				l.add(generate(cls, n));
+			switch (n.kind) {
+			case sym.COMMA: {
+				processMethodArgs(cls, thiz, n.left, l);
+				processMethodArgs(cls, thiz, n.right, l);
+				break;
+			}
+			default: {
+				l.add(generate(cls, thiz, n));
+			}
 			}
 		}
 		return l;
 	}
 
-	protected Register stackAlloc(String type, String comment) {
-		final String name = nextID();
-		output.append("\t");
-		output.append(name);
-		output.append(" = alloca ");
-		output.append(type);
-		if (comment != null && !comment.isEmpty()) {
-			output.append("\t\t; ");
-			output.append(comment);
+	private void writeMainFunction() throws Environment.EnvironmentException,
+			CodeGenerationException {
+		output.append("define i32 @main() {\n\tcall void @GC_init()\n");
+		final Environment.CoolClass mainClass = env.getClass("Main");
+		final Environment.CoolMethod mainMethod = env.lookupMethod(mainClass, "main");
+		Register main = instantiate(mainClass);
+		Register mainInst = load(main);
+		Register mainMethodPtr = getElementPtr(new Register(mainClass.getInternalDescriptorName(),
+				mainClass.getInternalClassName() + "*"), mainMethod.getInternalType() + "*", 0,
+				mainMethod.index);
+		Register mainMethodInst = load(mainMethodPtr);
+		// output.append("\t; ").append(mainMethodPtr.typeAndName()).append("\n");
+		call(mainMethodInst, mainInst, mainMethod.type.getInternalInstanceName() + "*");
+		output.append("\tret i32 0\n}\n\n");
+	}
+
+	private Register call(Register methodPtr, Register thiz, String retType, Register... args) {
+		return call(methodPtr, thiz, retType, Arrays.asList(args));
+	}
+
+	private Register call(Register methodPtr, Register thiz, String retType, List<Register> args) {
+		Register call = nextRegister(retType);
+		output.append("\t").append(call.name).append(" = call ").append(retType).append(" ")
+				.append(methodPtr.name).append("(").append(thiz.typeAndName());
+		for (Register r : args) {
+			output.append(", ").append(r.typeAndName());
 		}
-		output.append(" \n");
-
-		return new Register(name, type + "*");
+		output.append(")\n");
+		return call;
 	}
 
-	protected Register stackAlloc(Environment.CoolClass cls, String comment) {
-		return stackAlloc(cls, comment, 0);
-	}
-
-	protected Register stackAlloc(Environment.CoolClass cls, String comment, int ptrLevel) {
-		String s = "";
-		for (int i = 0; i < ptrLevel; ++i) {
-			s += "*";
+	private Register instantiate(Environment.CoolClass cls) throws CodeGenerationException,
+			Environment.EnvironmentException {
+		output.append("\t; START instantiating ").append(cls).append("\n");
+		Register result = nextRegister(cls.getInternalInstanceName() + "**");
+		alloca(result);
+		malloc(result, result.derefType());
+		Register instance = load(result);
+		output.append("\t; setting class pointer\n");
+		Register classPtr = getElementPtr(instance, cls.getInternalClassName() + "**", 0, 0);
+		Register clazz = new Register(cls.getInternalDescriptorName(), cls.getInternalClassName()
+				+ "*");
+		store(clazz, classPtr);
+		int i = 1;
+		for (Environment.CoolAttribute a : cls.attrList) {
+			output.append("\t; START attribute ").append(a).append(" of ").append(cls).append("\n");
+			Register attrPtr = getElementPtr(instance, a.type.getInternalInstanceName() + "**", 0,
+					i);
+			Register attrClass;
+			if (a.type == STRING || a.type == INT || a.type == BOOL) {
+				attrClass = instantiate(a.type);
+				Register attrInst = load(attrClass);
+				store(attrInst, attrPtr);
+			} else {
+				store(new Register("null", a.type.getInternalClassName() + "*"), attrPtr);
+			}
+			i++;
+			output.append("\t; END attribute ").append(a).append(" of ").append(cls).append("\n");
 		}
-		final String type = cls.getInternalInstanceName() + s;
-		return stackAlloc(type, comment);
-	}
 
-	protected int getAttrIndex(Environment.CoolClass cls, Environment.CoolAttribute attr)
-			throws CodeGenerationException {
-		final int result = cls.attrList.indexOf(attr) + 1;
-		if (result < 0)
-			throw new CodeGenerationException("Attempted to get nonexistent attribute " + attr
-					+ " of class " + cls);
+		if (cls.builtin) {
+			if (cls == STRING) {
+				output.append("\t; Setting new String to default (empty)\n");
+				setString(instance, "");
+			} else if (cls == INT) {
+				output.append("\t; Setting new Int to default (0)\n");
+				setInt(instance, 0);
+			} else if (cls == BOOL) {
+				output.append("\t; Setting new Bool to default (false)\n");
+				setBool(instance, false);
+			}
+		}
+
+		int i2 = 1;
+		for (Environment.CoolAttribute a : cls.attrList) {
+			if (a.node.right != null) {
+				output.append("\t; Initialize ").append(a).append(" to introduced value\n");
+				Register attrPtr = getElementPtr(instance, a.type.getInternalInstanceName() + "**",
+						0, i2);
+				Register v = generate(cls, result, a.node.right);
+				Register attrInst = load(v);
+				store(attrInst, attrPtr);
+			}
+			i2++;
+		}
+
+		output.append("\t; END instantiating ").append(cls).append("\n");
+
 		return result;
 	}
 
-	protected Register getAttrPtr(Register name, Environment.CoolClass cls,
-			Environment.CoolAttribute attr) throws CodeGenerationException {
-		final Register addr = stackAlloc(attr.type, MessageFormat.format("ptr to {0} of {1}", attr,
-				cls));
-		final int index = getAttrIndex(cls, attr);
-
-		final String load = nextID();
-		output.append("\t").append(load).append(" = load ").append(cls.getInternalInstanceName())
-				.append(" ** ").append(name).append("\n");
-
-		final String elptr = nextID();
-		output.append("\t").append(elptr).append(" = getelementptr inbounds ");
-		output.append(cls.getInternalInstanceName()).append(" * ").append(load).append(
-				", i32 0, i32 ");
-		output.append(index).append("\n");
-
-		output.append("\tstore ").append(attr.type.getInternalInstanceName()).append(" * ").append(
-				elptr).append(", ").append(attr.type.getInternalInstanceName()).append(" ** ")
-				.append(addr).append("\n");
-
-		return addr;
+	public void setBool(Register b, boolean val) {
+		Register boolPtr = getElementPtr(b, "i1 *", 0, 1);
+		store(new Register(val ? "1" : "0", "i1"), boolPtr);
 	}
 
-	protected void instantiateString(Register name) {
-		final String load = nextID();
-		final String lenAddr = nextID();
-		final String charAddr = nextID();
-
-		output.append("\t").append(load).append(" = load ")
-				.append(STRING.getInternalInstanceName()).append(" ** ").append(name).append("\n");
-
-		output.append("\t").append(lenAddr).append(" = getelementptr inbounds ");
-		output.append(STRING.getInternalInstanceName()).append(" * ").append(load).append(
-				", i32 0, i32 1").append("\n");
-
-		output.append("\t").append(charAddr).append(" = getelementptr inbounds ");
-		output.append(STRING.getInternalInstanceName()).append(" * ").append(load).append(
-				", i32 0, i32 2").append("\n");
-
-		output.append("\tstore i32 0, i32 * ").append(lenAddr).append("\t\t; initial strlen\n");
-
-		output.append("\tstore i8 * null, i8 ** ").append(charAddr)
-				.append("\t\t; initial strlen\n");
-
+	public void setInt(Register i, int val) {
+		Register intPtr = getElementPtr(i, "i32 *", 0, 1);
+		store(new Register("" + val, "i32"), intPtr);
 	}
 
-	protected void setStringValue(String name, String value) {
-
+	public void setString(Register str, String val) throws CodeGenerationException {
+		final int len = val.length() + 1;
+		val = val.replaceAll("[\"]", "\\\\22");
+		Register lenPtr = getElementPtr(str, "i32 *", 0, 1);
+		store(new Register("" + len, "i32"), lenPtr);
+		Register charPtr = getElementPtr(str, "i8 **", 0, 2);
+		Register charArrPtr = mallocCharArray(len);
+		output.append("\tstore ").append(charArrPtr.derefType()).append(" c\"").append(val).append(
+				"\\00\", ").append(charArrPtr.typeAndName()).append("\n");
+		Register castCharArrPtr = bitcast(charArrPtr, "i8 *");
+		store(castCharArrPtr, charPtr);
 	}
 
-	protected String setParent(Register name, Environment.CoolClass cls) {
-		final String result = nextID();
+	private Register bitcast(Register r, String type) {
+		Register result = nextRegister(type);
+		output.append("\t").append(result.name).append(" = bitcast ").append(r.typeAndName())
+				.append(" to ").append(type).append("\n");
+		return result;
+	}
 
-		output.append("\t");
-		output.append(result).append(" = alloca ").append(cls.parent.getInternalClassName())
-				.append(" * \t\t; ptr to parent ptr\n");
+	private void store(Register value, Register dest) {
+		output.append("\tstore ").append(value.typeAndName()).append(", ").append(
+				dest.typeAndName()).append("\n");
+	}
 
-		final String load = nextID();
-		output.append("\t").append(load).append(" = load ").append(cls.getInternalInstanceName())
-				.append(" ** ").append(name).append("\n");
-
-		final String getAddr = nextID();
-
-		output.append("\t");
-		output.append(getAddr).append(" = getelementptr inbounds ").append(
-				cls.getInternalInstanceName()).append(" * ");
-		output.append(load).append(", i32 0, i32 0\n");
-
-		output.append("\tstore ").append(cls.parent.getInternalClassName()).append(" * ").append(
-				cls.parent.getInternalDescriptorName());
-		output.append(", ").append(cls.parent.getInternalClassName()).append(" ** ")
-				.append(getAddr);
+	private Register getElementPtr(Register r, String type, int... args) {
+		Register result = nextRegister(type);
+		output.append("\t").append(result.name).append(" = getelementptr ").append(r.typeAndName());
+		for (int i : args) {
+			output.append(", ");
+			output.append("i32 ").append(i);
+		}
 		output.append("\n");
 		return result;
 	}
 
-	protected void instantiateObject(Environment.CoolClass c, Register reg)
-			throws CodeGenerationException {
-		setParent(reg, c);
-		if (c == STRING) {
-			instantiateString(reg);
-		} else {
-			for (Environment.CoolAttribute a : c.attrList) {
-				final Register ptr = getAttrPtr(reg, c, a);
-				// TODO init objects
-			}
-		}
+	private Register alloca(Register r) throws CodeGenerationException {
+		output.append("\t").append(r.name).append(" = alloca ").append(r.derefType()).append("\n");
+		return r;
 	}
 
-	protected void writeMainFunction() {
+	private Register load(Register from) throws CodeGenerationException {
+		Register result = nextRegister(from.derefType());
+		output.append("\t").append(result.name).append(" = load ").append(from.typeAndName())
+				.append("\n");
+		return result;
+	}
 
+	private Register mallocCharArray(int len) {
+		Register charArr = nextRegister("[" + len + " x i8]*");
+
+		Register call = nextRegister("i8 *");
+		output.append("\t").append(call.name).append(" = call noalias i8* @GC_malloc(i64 ").append(
+				len).append(")\n");
+
+		output.append("\t").append(charArr.name).append(" = bitcast ").append(call.typeAndName())
+				.append(" to ").append(charArr.type).append("\n");
+
+		return charArr;
+	}
+
+	private Register malloc(Register r, String type) {
+		Register size = nextRegister(type);
+		Register cast = nextRegister("i64");
+		output.append("\t").append(size.name).append(" = getelementptr ").append(size.type).append(
+				" null, i32 1\n");
+		output.append("\t").append(cast.name).append(" = ptrtoint ").append(type).append(" ")
+				.append(size.name).append(" to ").append(cast.type).append("\n");
+
+		Register call = nextRegister("i8 *");
+		output.append("\t").append(call.name).append(" = call noalias i8* @GC_malloc(i64 ").append(
+				cast.name).append(")\n");
+
+		Register cast2 = nextRegister(type);
+		output.append("\t").append(cast2.name).append(" = bitcast ").append(call.typeAndName())
+				.append(" to ").append(cast2.type).append("\n");
+
+		output.append("\tstore ").append(cast2.typeAndName()).append(", ").append(r.type).append(
+				" ").append(r.name).append("\n");
+		return r;
 	}
 
 	private void log(String msg) {
