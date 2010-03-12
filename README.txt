@@ -1,9 +1,8 @@
 Nicholas Chaimov
 Andrew Reinders
 CIS 461
-Feb 15th, 2010
 
-TYPECHECKER ASSIGNMENT
+CODE GENERATOR ASSIGNMENT
 
 To build, run make.
 To run the parser, run parse <filename>. Use parse -dp to output
@@ -13,6 +12,14 @@ To visualize the generated abstract syntax tree, run
 	tree <filename>
 The tree will be created in a file called out.pdf.
 Use tree -dt <filename> to output debugging information regarding the typechecker.
+
+To run the code generator, run
+    ./cool <filename>
+The llvm code will be output in a file called out.ll.
+The native executable will be called out.
+
+Use cool -dc <filename> to output debugging information regarding the typechecker.
+Use cool -s <filename> to also print the generated llvm code to the screen.
 
 Graphviz must be installed for the tree command to work.
 
