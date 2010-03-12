@@ -4,8 +4,9 @@ class Q inherits IO {
 };
 
 class Main inherits Q {
-	a : String := "Hello world!\n";
+	q : String;
+	a : String := (q := "Hello world!\n");
 	b : Int := (2 + ((3 + 10) * 4) - 4) / 10;
 	getA() : String {{ outC(); a; }};
-	main() : Object {{ self@IO.out_string(getA()); out_int(b); out_string("\n"); }};
+	main() : Object {{ self@IO.out_string(getA()); out_int(b); out_string("\n"); q := "meow\n"; a := new String; out_string(q); }};
 };

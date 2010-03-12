@@ -50,6 +50,7 @@ public class CodeGenerator {
 	protected final Environment.CoolClass IO;
 
 	protected int id;
+	protected int label;
 
 	protected Environment env;
 
@@ -79,9 +80,14 @@ public class CodeGenerator {
 		return new Register(nextID(), type);
 	}
 
+	public String nextLabel() {
+		return "Label" + label++;
+	}
+
 	public String generateCode() {
 		output = new StringBuilder();
 		id = 0;
+		label = 0;
 		try {
 
 			output.append("@str.format = private constant [3 x i8] c\"%s\\00\"\n");
@@ -214,8 +220,13 @@ public class CodeGenerator {
 								.idToName(m.node.kind)));
 			log(MessageFormat.format("Generating function body for {0} of {1}", m, cls));
 			Register body = generate(cls, thiz, m.node.right);
+
 			output.append("\tret ").append(body.typeAndName()).append("\n");
 		}
+	}
+
+	protected void comment(String comment) {
+		output.append("\t; ").append(comment).append("\n");
 	}
 
 	protected Register generate(Environment.CoolClass cls, Register thiz, ASTnode n)
@@ -223,30 +234,119 @@ public class CodeGenerator {
 		if (n != null) {
 			switch (n.kind) {
 
-			case sym.SEMI: {
-				final Register leftVar = generate(cls, thiz, n.left);
-				final Register rightVar = generate(cls, thiz, n.right);
-				if (rightVar == null)
-					return leftVar;
-				else
-					return rightVar;
+			case sym.TRUE: {
+				comment("START True literal");
+				Register b = instantiate(BOOL);
+				Register bP = load(b);
+				setBool(bP, true);
+				comment("END True literal");
+				return b;
+			}
+
+			case sym.FALSE: {
+				comment("START False literal");
+				Register b = instantiate(BOOL);
+				comment("END False literal");
+				return b;
+			}
+
+			case sym.INTLIT: {
+				comment(MessageFormat.format("START Int literal ({0})", n.value));
+				Register i = instantiate(INT);
+				Register iP = load(i);
+				setInt(iP, Integer.parseInt((String) n.value));
+				comment(MessageFormat.format("END Int literal ({0})", n.value));
+				return i;
+			}
+
+			case sym.STRINGLIT: {
+				String v = ((String) n.value).replaceAll("[^A-Za-z0-9]", "");
+				comment(MessageFormat.format("START String literal ({0})", v));
+				Register str = instantiate(STRING);
+				Register strP = load(str);
+				setString(strP, (String) n.value);
+				comment(MessageFormat.format("END String literal ({0})", v));
+				return str;
+			}
+
+			case sym.ID: {
+				if (n.value.equals("self"))
+					return thiz;
+				comment(MessageFormat.format("START ID load ({0})", n.value));
+				Register local = env.registers.get((String) n.value);
+				if (local != null)
+					return local;
+				Environment.CoolClass curClass = cls;
+				Environment.CoolAttribute a = null;
+				while (a == null && curClass != OBJECT) {
+					a = curClass.attributes.get(n.value);
+					curClass = curClass.parent;
+				}
+				int index = cls.attrList.indexOf(a) + 1;
+				log("Attribute " + a + " is at index " + index + " of class " + a.parent);
+				Register idPtr = getElementPtr(thiz, a.type.getInternalInstanceName() + "**", 0,
+						index);
+				Register idInst = load(idPtr);
+				comment(MessageFormat.format("END ID load ({0})", n.value));
+				return idInst;
+			}
+
+			case sym.ASSIGN: {
+				comment("Start ASSIGN");
+
+				// Get attribute location
+				String id = (String) n.left.value;
+				Register local = env.registers.get(id);
+				if (local != null)
+					return local;
+				Environment.CoolClass curClass = cls;
+				Environment.CoolAttribute a = null;
+				while (a == null && curClass != OBJECT) {
+					a = curClass.attributes.get(id);
+					curClass = curClass.parent;
+				}
+				int index = cls.attrList.indexOf(a) + 1;
+				log("Attribute " + a + " is at index " + index + " of class " + a.parent);
+				Register thizInst = makeSinglePtr(thiz);
+				Register idPtr = getElementPtr(thizInst, a.type.getInternalInstanceName() + "**",
+						0, index);
+
+				Register rightSide = generate(cls, thiz, n.right);
+				Register rightInst = load(rightSide);
+
+				store(rightInst, idPtr);
+
+				comment("End ASSIGN");
+				return rightSide;
+			}
+
+			case sym.NEW: {
+				Register newObj = instantiate(env.getClass((String) n.value));
+				return newObj;
 			}
 
 			case sym.DOT: {
+				comment(MessageFormat.format("START Method call ({0})", n.value));
 				Register id = thiz;
+				Environment.CoolClass curClass = cls;
 				if (n.left != null) {
 					id = generate(cls, thiz, n.left);
+					curClass = n.left.type;
+					log(MessageFormat.format("Target of method invocation is {0} of type {1}", id
+							.typeAndName(), cls));
 				}
 
-				Environment.CoolClass curClass = cls;
 				if (n.center != null) {
 					curClass = env.getClass((String) n.center.value);
+					log(MessageFormat.format("Will statically use type {0} for method call.",
+							curClass));
 				}
 
 				List<Register> mArgs = processMethodArgs(cls, thiz, n.right);
 				List<Register> args = new LinkedList<Register>();
 
-				Environment.CoolMethod method = env.lookupMethod(cls, (String) n.value);
+				log("Looking up method " + n.value + " in " + curClass);
+				Environment.CoolMethod method = env.lookupMethod(curClass, (String) n.value);
 				log("Will call method " + method + " at index " + method.index + " of "
 						+ method.parent);
 
@@ -278,67 +378,84 @@ public class CodeGenerator {
 				Register call = call(methodInst, cast, method.type.getInternalInstanceName() + "*",
 						args);
 
+				comment(MessageFormat.format("END Method call ({0})", n.value));
 				return call;
 			}
 
-			case sym.ID: {
-				if (n.value.equals("self"))
-					return thiz;
-				Register local = env.registers.get((String) n.value);
-				if (local != null)
-					return local;
-				Environment.CoolClass curClass = cls;
-				Environment.CoolAttribute a = null;
-				while (a == null && curClass != OBJECT) {
-					a = curClass.attributes.get(n.value);
-					curClass = curClass.parent;
+			case sym.IF: {
+				comment("START If statement");
+				Register cond = generate(cls, thiz, n.left);
+				Register condLoad = load(cond);
+				Register condPtr = getElementPtr(condLoad, "i1 *", 0, 1);
+				Register condVal = load(condPtr);
+				String trueBranch = nextLabel();
+				String falseBranch = nextLabel();
+				String doneBranch = nextLabel();
+				branch(condVal, trueBranch, falseBranch);
+				writeLabel(trueBranch);
+				Register trueResult = generate(cls, thiz, n.center);
+				trueResult = makeSinglePtr(trueResult);
+				if (!trueResult.type.equals(n.type.getInternalInstanceName() + "*")) {
+					trueResult = bitcast(trueResult, n.type.getInternalInstanceName() + "*");
 				}
-				int index = cls.attrList.indexOf(a) + 1;
-				log("Attribute " + a + " is at index " + index + " of class " + a.parent);
-				Register idPtr = getElementPtr(thiz, a.type.getInternalInstanceName() + "**", 0,
-						index);
-				Register idInst = load(idPtr);
-				return idInst;
+				branch(doneBranch);
+				writeLabel(falseBranch);
+				Register falseResult = generate(cls, thiz, n.right);
+				falseResult = makeSinglePtr(falseResult);
+				if (!falseResult.type.equals(n.type.getInternalInstanceName() + "*")) {
+					falseResult = bitcast(falseResult, n.type.getInternalInstanceName() + "*");
+				}
+				branch(doneBranch);
+				writeLabel(doneBranch);
+				Register ifResult = nextRegister(n.type.getInternalInstanceName() + "*");
+				output.append("\t").append(ifResult.name).append(" = phi ").append(ifResult.type)
+						.append(" [ ").append(trueResult.name).append(", %").append(trueBranch)
+						.append(" ], [ ").append(falseResult.name).append(", %")
+						.append(falseBranch).append(" ]\n");
+				comment("END If statement");
+				return ifResult;
 			}
 
-			case sym.STRINGLIT: {
-				Register str = instantiate(STRING);
-				Register strP = load(str);
-				setString(strP, (String) n.value);
-				return str;
+			case sym.SEMI: {
+				final Register leftVar = generate(cls, thiz, n.left);
+				final Register rightVar = generate(cls, thiz, n.right);
+				if (rightVar == null)
+					return leftVar;
+				else
+					return rightVar;
 			}
 
-			case sym.INTLIT: {
-				Register i = instantiate(INT);
-				Register iP = load(i);
-				setInt(iP, Integer.parseInt((String) n.value));
-				return i;
+			case sym.LET: {
+				int numInts = processLetIntroductions(cls, thiz, n.left);
+				Register result = generate(cls, thiz, n.right);
+				for (int i = 0; i < numInts; ++i) {
+					env.registers.pop();
+				}
+				return result;
 			}
-
-			case sym.TRUE: {
-				Register b = instantiate(BOOL);
-				Register bP = load(b);
-				setBool(bP, true);
-				return b;
-			}
-
-			case sym.FALSE: {
-				Register b = instantiate(BOOL);
-				return b;
-			}
+				// TODO CASE
+				// TODO WHILE
+				// TODO ISVOID
+				// TODO NOT
+				// TODO LT
+				// TODO LEQ
 
 			case sym.PLUS:
 			case sym.MINUS:
 			case sym.TIMES:
 			case sym.DIV: {
+				comment(MessageFormat.format("START Arithmetic operation ({0})", Util
+						.idToName(n.kind)));
 				Register arg1 = generate(cls, thiz, n.left);
 				Register arg2 = generate(cls, thiz, n.right);
-				output.append("\t; *****************************\n");
 				Register result = intOpt(n.kind, arg1, arg2);
-				output.append("\t; *****************************\n");
+				comment(MessageFormat.format("END Arithmetic operation ({0})", Util
+						.idToName(n.kind)));
 				return result;
 			}
 
+				// TODO EQ
+				// TODO NEG
 			default:
 				if (debug) {
 					log("Unknown node type found in AST:" + Util.idToName(n.kind));
@@ -348,6 +465,65 @@ public class CodeGenerator {
 			}
 		}
 		return null;
+	}
+
+	private int processLetIntroductions(Environment.CoolClass cls, Register thiz, ASTnode node)
+			throws CodeGenerationException, Environment.EnvironmentException {
+		return processLetIntroductions(cls, thiz, node, 0);
+	}
+
+	private int processLetIntroductions(Environment.CoolClass cls, Register thiz, ASTnode node,
+			int numVars) throws CodeGenerationException, Environment.EnvironmentException {
+
+		if (node != null) {
+			switch (node.kind) {
+			case sym.COMMA: {
+				numVars += processLetIntroductions(cls, thiz, node.left, 0);
+				numVars += processLetIntroductions(cls, thiz, node.right, 0);
+				break;
+			}
+			case sym.ASSIGN: {
+				numVars += 1;
+				String name = (String) node.left.left.value;
+				Environment.CoolClass type = env.getClass((String) node.left.right.value);
+				Register letVar = instantiate(type);
+				if (node.right != null) {
+					Register letValuePtr = generate(cls, thiz, node.right);
+					Register letValue = load(letValuePtr);
+					store(letValue, letVar);
+				}
+				log(MessageFormat.format("Pushing {0} for {1}", letVar.typeAndName(), name));
+				env.registers.push(name, letVar);
+				break;
+			}
+			default:
+				throw new CodeGenerationException("Invalid node type in Let introductions: "
+						+ Util.idToName(node.kind));
+			}
+		}
+
+		return numVars;
+	}
+
+	protected Register makeSinglePtr(Register ptr) throws CodeGenerationException {
+		Register result = ptr;
+		while (result.type.endsWith("**")) {
+			result = load(result);
+		}
+		return result;
+	}
+
+	protected void branch(String label) {
+		output.append("\tbr label %").append(label).append("\n");
+	}
+
+	protected void branch(Register cond, String trueBranch, String falseBranch) {
+		output.append("\tbr ").append(cond.typeAndName()).append(", label %").append(trueBranch)
+				.append(", label %").append(falseBranch).append("\n");
+	}
+
+	protected void writeLabel(String label) {
+		output.append(label).append(":\n");
 	}
 
 	private Register intOpt(int kind, Register r1, Register r2) throws CodeGenerationException,
@@ -466,7 +642,7 @@ public class CodeGenerator {
 				Register attrInst = load(attrClass);
 				store(attrInst, attrPtr);
 			} else {
-				store(new Register("null", a.type.getInternalClassName() + "*"), attrPtr);
+				store(new Register("null", a.type.getInternalInstanceName() + "*"), attrPtr);
 			}
 			i++;
 			output.append("\t; END attribute ").append(a).append(" of ").append(cls).append("\n");

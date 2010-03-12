@@ -9,10 +9,13 @@ CLASSPATH=.:${CUP}:${TMPL}:${ANTLR}:${CLI}
 #
 java -cp $CLASSPATH Cool $* > out.ll
 if [ "$?" -eq "0" ]; then
+    echo "Assembling LLVM code..."
     llvm-as out.ll -o out.bc -f
     if [ "$?" -eq "0" ]; then
+        echo "Converting LLVM bytecode into native assembly code..."
         llc -O3 out.bc -o out.S -f       
         if [ "$?" -eq "0" ]; then
+            echo "Assembling and linking..."
             gcc out.S -O3 -lgc -o out
         fi
     fi

@@ -1,16 +1,3 @@
-class Main {
-    a : Bool := true;
-	b : A := if a then new B else new C fi;
-};
-
-class A {
-	
-};
-
-class B inherits A {
-	
-};
-
-class C inherits A {
-	
+class Main inherits IO {
+	main() : Object {{ if true then out_string("It's true!\n") else out_string("It's false!\n") fi; }};
 };

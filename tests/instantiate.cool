@@ -1,0 +1,4 @@
+class Main {
+	a : IO := new IO;
+	main() : Object {{ a.out_string("Hello world!\n"); }};
+};
