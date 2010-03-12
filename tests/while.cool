@@ -1,4 +1,4 @@
-class Main {
+class Main inherits IO {
 	x : Int := 0;
-	a() : Object {{ while true do x := 1 od; }};
+	main() : Object {{ while x < 50 do {x := x + 1; out_int(x); out_string("\n");} od; }};
 };

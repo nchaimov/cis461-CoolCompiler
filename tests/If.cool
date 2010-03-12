@@ -1,3 +1,4 @@
 class Main inherits IO {
-	main() : Object {{ if true then out_string("It's true!\n") else out_string("It's false!\n") fi; }};
+	x : Int;
+	main() : Object {{ if false then x := 1 else x := 2 fi; out_int(x); out_string("\n"); }};
 };

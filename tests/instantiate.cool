@@ -1,4 +1,21 @@
 class Main {
-	a : IO := new IO;
-	main() : Object {{ a.out_string("Hello world!\n"); }};
+	io : IO := new IO;
+	a : A := new C;
+	b : B := new B;
+	main() : Object {{ io.out_string("Hello world!\n"); io.out_string(a.get()); io.out_string(b.get()); }};
+};
+
+class A {
+	a : String := "A\n";
+	get() : String {{ a; }};
+};
+
+class C inherits A {
+	c : String := "C\n";
+	get() : String {{ c; }};
+};
+
+class B {
+	b : String := "B\n";
+	get() : String {{ b; }};
 };

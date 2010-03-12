@@ -103,6 +103,7 @@ public class CodeGenerator {
 			output.append("\ndeclare i32 @printf(i8* noalias, ...)\n");
 			output.append("declare noalias i8* @GC_malloc(i64)\n");
 			output.append("declare void @GC_init()\n\n");
+			output.append("declare i32 @strcmp(i8*, i8*)");
 		} catch (Exception ex) {
 			System.err.println("*** Code generation failed!");
 			ex.printStackTrace();
@@ -220,7 +221,9 @@ public class CodeGenerator {
 								.idToName(m.node.kind)));
 			log(MessageFormat.format("Generating function body for {0} of {1}", m, cls));
 			Register body = generate(cls, thiz, m.node.right);
-
+			if (!body.type.equals(m.type.getInternalInstanceName() + "*")) {
+				body = bitcast(body, m.type.getInternalInstanceName() + "*");
+			}
 			output.append("\tret ").append(body.typeAndName()).append("\n");
 		}
 	}
@@ -231,6 +234,7 @@ public class CodeGenerator {
 
 	protected Register generate(Environment.CoolClass cls, Register thiz, ASTnode n)
 			throws CodeGenerationException, Environment.EnvironmentException {
+		thiz = makeSinglePtr(thiz);
 		if (n != null) {
 			switch (n.kind) {
 
@@ -312,7 +316,7 @@ public class CodeGenerator {
 						0, index);
 
 				Register rightSide = generate(cls, thiz, n.right);
-				Register rightInst = load(rightSide);
+				Register rightInst = makeSinglePtr(rightSide);
 
 				store(rightInst, idPtr);
 
@@ -385,7 +389,7 @@ public class CodeGenerator {
 			case sym.IF: {
 				comment("START If statement");
 				Register cond = generate(cls, thiz, n.left);
-				Register condLoad = load(cond);
+				Register condLoad = makeSinglePtr(cond);
 				Register condPtr = getElementPtr(condLoad, "i1 *", 0, 1);
 				Register condVal = load(condPtr);
 				String trueBranch = nextLabel();
@@ -434,11 +438,99 @@ public class CodeGenerator {
 				return result;
 			}
 				// TODO CASE
-				// TODO WHILE
-				// TODO ISVOID
-				// TODO NOT
-				// TODO LT
-				// TODO LEQ
+
+			case sym.WHILE: {
+				comment("START While loop");
+				String loopHead = nextLabel();
+				String loopTest = nextLabel();
+				String afterLoop = nextLabel();
+				branch(loopTest);
+				writeLabel(loopHead);
+				Register loop = generate(cls, thiz, n.right);
+				branch(loopTest);
+				writeLabel(loopTest);
+				Register cond = generate(cls, thiz, n.left);
+				Register condLoad = load(cond);
+				Register condPtr = getElementPtr(condLoad, "i1 *", 0, 1);
+				Register condVal = load(condPtr);
+				branch(condVal, loopHead, afterLoop);
+				writeLabel(afterLoop);
+				Register resultPtr = nextRegister(OBJECT.getInternalInstanceName() + "**");
+				alloca(resultPtr);
+				store(new Register("null", OBJECT.getInternalInstanceName() + "*"), resultPtr);
+				Register result = load(resultPtr);
+				comment("END While loop");
+				return result;
+			}
+
+			case sym.ISVOID: {
+				comment("START isvoid");
+				Register value = generate(cls, thiz, n.left);
+				Register resVal = nextRegister("i1");
+				output.append("\t").append(resVal).append(" = icmp eq ")
+						.append(value.typeAndName()).append(", null").append("\n");
+				comment("END isvoid");
+				Register resultPtr = instantiate(BOOL);
+				Register result = load(resultPtr);
+				Register boolPtr = getElementPtr(result, "i1 *", 0, 1);
+				store(resVal, boolPtr);
+
+				return resultPtr;
+			}
+
+			case sym.NOT: {
+				comment("START not");
+				Register cond = generate(cls, thiz, n.left);
+				Register condLoad = makeSinglePtr(cond);
+				Register condPtr = getElementPtr(condLoad, "i1 *", 0, 1);
+				Register condVal = load(condPtr);
+
+				Register resVal = nextRegister("i1");
+				output.append("\t").append(resVal).append(" = icmp ne ").append(
+						condVal.typeAndName()).append(", 0\n");
+
+				Register resultPtr = instantiate(BOOL);
+				Register result = load(resultPtr);
+				Register boolPtr = getElementPtr(result, "i1 *", 0, 1);
+				store(resVal, boolPtr);
+
+				comment("END not");
+				return resultPtr;
+			}
+
+			case sym.LEQ:
+			case sym.LT: {
+				comment("START less-than comparison");
+				Register int1 = generate(cls, thiz, n.left);
+				Register int1load = makeSinglePtr(int1);
+				Register int1Ptr = getElementPtr(int1load, "i32 *", 0, 1);
+				Register int1Val = load(int1Ptr);
+
+				Register int2 = generate(cls, thiz, n.right);
+				Register int2load = makeSinglePtr(int2);
+				Register int2Ptr = getElementPtr(int2load, "i32 *", 0, 1);
+				Register int2Val = load(int2Ptr);
+
+				String op;
+				if (n.kind == sym.LEQ) {
+					op = "sle";
+				} else {
+					op = "slt";
+				}
+
+				Register resVal = nextRegister("i1");
+				output.append("\t").append(resVal).append(" = icmp ").append(op).append(" ")
+						.append(int1Val.typeAndName()).append(", ").append(int2Val.name).append(
+								"\n");
+
+				Register resultPtr = instantiate(BOOL);
+				Register result = load(resultPtr);
+				Register boolPtr = getElementPtr(result, "i1 *", 0, 1);
+				store(resVal, boolPtr);
+
+				comment("END less-than comparison");
+				return resultPtr;
+			}
 
 			case sym.PLUS:
 			case sym.MINUS:
@@ -454,8 +546,109 @@ public class CodeGenerator {
 				return result;
 			}
 
-				// TODO EQ
-				// TODO NEG
+			case sym.EQ: {
+				if (n.left.type == INT) {
+					comment("START integer equality comparison");
+					Register int1 = generate(cls, thiz, n.left);
+					Register int1load = makeSinglePtr(int1);
+					Register int1Ptr = getElementPtr(int1load, "i32 *", 0, 1);
+					Register int1Val = load(int1Ptr);
+
+					Register int2 = generate(cls, thiz, n.right);
+					Register int2load = makeSinglePtr(int2);
+					Register int2Ptr = getElementPtr(int2load, "i32 *", 0, 1);
+					Register int2Val = load(int2Ptr);
+
+					Register resVal = nextRegister("i1");
+					output.append("\t").append(resVal).append(" = icmp eq ").append(" ").append(
+							int1Val.typeAndName()).append(", ").append(int2Val.name).append("\n");
+					Register resultPtr = instantiate(BOOL);
+					Register result = load(resultPtr);
+					Register boolPtr = getElementPtr(result, "i1 *", 0, 1);
+					store(resVal, boolPtr);
+
+					comment("END integer equality comparison");
+					return resultPtr;
+				} else if (n.left.type == BOOL) {
+					comment("START bool equality comparison");
+					Register int1 = generate(cls, thiz, n.left);
+					Register int1load = makeSinglePtr(int1);
+					Register int1Ptr = getElementPtr(int1load, "i1 *", 0, 1);
+					Register int1Val = load(int1Ptr);
+
+					Register int2 = generate(cls, thiz, n.right);
+					Register int2load = makeSinglePtr(int2);
+					Register int2Ptr = getElementPtr(int2load, "i1 *", 0, 1);
+					Register int2Val = load(int2Ptr);
+
+					Register resVal = nextRegister("i1");
+					output.append("\t").append(resVal).append(" = icmp eq ").append(" ").append(
+							int1Val.typeAndName()).append(", ").append(int2Val.name).append("\n");
+					Register resultPtr = instantiate(BOOL);
+					Register result = load(resultPtr);
+					Register boolPtr = getElementPtr(result, "i1 *", 0, 1);
+					store(resVal, boolPtr);
+
+					comment("END bool equality comparison");
+					return resultPtr;
+				} else if (n.left.type == STRING) {
+					comment("START string equality comparison");
+					Register int1 = generate(cls, thiz, n.left);
+					Register int1load = makeSinglePtr(int1);
+					Register int1Ptr = getElementPtr(int1load, "i8 **", 0, 2);
+					Register int1Val = load(int1Ptr);
+
+					Register int2 = generate(cls, thiz, n.right);
+					Register int2load = makeSinglePtr(int2);
+					Register int2Ptr = getElementPtr(int2load, "i8 **", 0, 2);
+					Register int2Val = load(int2Ptr);
+
+					Register call = nextRegister("i32");
+
+					output.append("\t").append(call.name).append(" = call i32 @strcmp(").append(
+							int1Val.typeAndName()).append(", ").append(int2Val.typeAndName())
+							.append(")\n");
+
+					Register resVal = nextRegister("i1");
+					output.append("\t").append(resVal).append(" = icmp eq ").append(" ").append(
+							call.typeAndName()).append(", 0\n");
+
+					Register resultPtr = instantiate(BOOL);
+					Register result = load(resultPtr);
+					Register boolPtr = getElementPtr(result, "i1 *", 0, 1);
+					store(resVal, boolPtr);
+
+					comment("END string equality comparison");
+					return resultPtr;
+				} else {
+					comment("START object equality comparison");
+					Register arg1 = generate(cls, thiz, n.left);
+					Register arg2 = generate(cls, thiz, n.right);
+
+					Register resVal = nextRegister("i1");
+					output.append("\t").append(resVal).append(" = icmp eq ").append(" ").append(
+							arg1.typeAndName()).append(", ").append(arg2.name).append("\n");
+
+					Register resultPtr = instantiate(BOOL);
+					Register result = load(resultPtr);
+					Register boolPtr = getElementPtr(result, "i1 *", 0, 1);
+					store(resVal, boolPtr);
+					comment("END object equality comparison");
+					return resultPtr;
+				}
+			}
+
+			case sym.NEG: {
+				comment("START negation");
+				Register arg1 = generate(cls, thiz, n.left);
+				Register zeroPtr = instantiate(INT);
+				Register zero = load(zeroPtr);
+				setInt(zero, 0);
+				Register result = intOpt(sym.MINUS, zero, arg1);
+				comment("END negation");
+				return result;
+			}
+
 			default:
 				if (debug) {
 					log("Unknown node type found in AST:" + Util.idToName(n.kind));
@@ -531,10 +724,12 @@ public class CodeGenerator {
 		Register result = instantiate(INT);
 		Register resInst = load(result);
 
-		Register r1Inst = load(r1);
+		comment("Getting first parameter to binop");
+		Register r1Inst = makeSinglePtr(r1);
 		Register r1IntPtr = getElementPtr(r1Inst, "i32 *", 0, 1);
 
-		Register r2Inst = load(r2);
+		comment("Getting second parameter to binop");
+		Register r2Inst = makeSinglePtr(r2);
 		Register r2IntPtr = getElementPtr(r2Inst, "i32 *", 0, 1);
 
 		Register r1Int = load(r1IntPtr);
@@ -668,7 +863,10 @@ public class CodeGenerator {
 				Register attrPtr = getElementPtr(instance, a.type.getInternalInstanceName() + "**",
 						0, i2);
 				Register v = generate(cls, result, a.node.right);
-				Register attrInst = load(v);
+				Register attrInst = makeSinglePtr(v);
+				if (!(attrInst.type + "*").equals(attrPtr.type)) {
+					attrInst = bitcast(attrInst, attrPtr.derefType());
+				}
 				store(attrInst, attrPtr);
 			}
 			i2++;

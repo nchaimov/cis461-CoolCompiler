@@ -1,0 +1,9 @@
+class Main inherits IO {
+	a : Object := new A;
+	b : Object;
+	main() : Object {{ b := a; if a = b then out_string("Equal!\n") else out_string("Not equal!\n") fi; }};
+};
+
+class A {
+	a : Int := 4;
+};

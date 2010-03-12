@@ -1,0 +1,4 @@
+class Main inherits IO {
+	a : Bool := false;
+	main() : Object {{ if not a then out_string("not a\n") else out_string("a\n") fi; }};
+};
