@@ -102,8 +102,8 @@ public class CodeGenerator {
 
 			output.append("\ndeclare i32 @printf(i8* noalias, ...)\n");
 			output.append("declare noalias i8* @GC_malloc(i64)\n");
-			output.append("declare void @GC_init()\n\n");
-			output.append("declare i32 @strcmp(i8*, i8*)");
+			output.append("declare void @GC_init()\n");
+			output.append("declare i32 @strcmp(i8*, i8*)\n\n");
 		} catch (Exception ex) {
 			System.err.println("*** Code generation failed!");
 			ex.printStackTrace();
@@ -371,9 +371,16 @@ public class CodeGenerator {
 
 				}
 
-				Register methodPtr = getElementPtr(new Register(method.parent
-						.getInternalDescriptorName(), method.parent.getInternalClassName() + "*"),
-						method.getInternalType() + "*", 0, method.index);
+				comment("Get pointer to class of object");
+				Register castId = bitcast(id, curClass.getInternalInstanceName() + "*");
+				Register idClassPtr = getElementPtr(castId, curClass.getInternalClassName() + "**",
+						0, 0);
+				// Register clsCast = bitcast(idClassPtr,
+				// method.parent.getInternalClassName() + "**");
+				Register idClass = makeSinglePtr(idClassPtr);
+				comment("getting method " + method + " of " + method.parent);
+				Register methodPtr = getElementPtr(idClass, method.getInternalType() + "*", 0,
+						method.index);
 				Register methodInst = load(methodPtr);
 
 				Register cast = bitcast(id, method.parent.getInternalInstanceName() + "*");

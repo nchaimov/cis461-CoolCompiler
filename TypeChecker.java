@@ -57,6 +57,9 @@ public class TypeChecker {
 			log("\n--> Pass 3b: dealing with attribute inheritance");
 			inheritAttributes();
 
+			log("\n--> Pass 3c: dealing with method inheritance");
+			inheritMethods();
+
 			log("\n--> Pass 4: typecheck attributes");
 			checkAttributes();
 
@@ -240,7 +243,7 @@ public class TypeChecker {
 	}
 
 	private void inheritAttributes(Environment.CoolClass c) {
-		if (!c.inheritDone && c != OBJECT) {
+		if (!c.attrInheritDone && c != OBJECT) {
 			log("Checking " + c);
 			inheritAttributes(c.parent);
 			LinkedList<Environment.CoolClass> q = new LinkedList<Environment.CoolClass>();
@@ -257,12 +260,64 @@ public class TypeChecker {
 					c.attrList.add(a);
 				}
 			}
-			c.inheritDone = true;
+			c.attrInheritDone = true;
 		}
 		log("Class: " + c);
 		if (debug) {
 			for (Environment.CoolAttribute a : c.attrList) {
-				System.err.println("In " + c + " is " + a);
+				System.err.println(MessageFormat.format("In {0} is {1}", c, a));
+			}
+		}
+	}
+
+	private void inheritMethods() {
+		for (Environment.CoolClass c : env.classes.values()) {
+			inheritMethods(c);
+		}
+		if (debug) {
+			for (Environment.CoolClass c : env.classes.values()) {
+				log(MessageFormat.format("\nClass {0} methodlist:", c));
+				for (Environment.CoolMethod m : c.methodList) {
+					log(MessageFormat.format("{0} (parent = {1})", m, m.parent));
+				}
+			}
+		}
+	}
+
+	private void inheritMethods(Environment.CoolClass c) {
+		if (!c.methodInheritDone && c != OBJECT) {
+			log("Checking " + c);
+			inheritMethods(c.parent);
+			LinkedList<Environment.CoolClass> q = new LinkedList<Environment.CoolClass>();
+			q.push(c);
+			Environment.CoolClass p = c.parent;
+			while (p != OBJECT) {
+				q.push(p);
+				p = p.parent;
+			}
+			while (!q.isEmpty()) {
+				Environment.CoolClass curClass = q.pop();
+				for (Environment.CoolMethod a : curClass.methods.values()) {
+					log("Found method " + a + " of " + curClass + " for " + c);
+					Environment.CoolMethod overriddenMethod = c.methods.get(a.name);
+					log(overriddenMethod != null ? "" + overriddenMethod.parent : "not overridden");
+					if (overriddenMethod != null) {
+						if (!c.methodList.contains(overriddenMethod)) {
+							c.methodList.add(overriddenMethod);
+						}
+					} else {
+						if (!c.methodList.contains(a)) {
+							c.methodList.add(a);
+						}
+					}
+				}
+			}
+			c.methodInheritDone = true;
+		}
+		log("Class: " + c);
+		if (debug) {
+			for (Environment.CoolAttribute a : c.attrList) {
+				System.err.println(MessageFormat.format("In {0} is {1}", c, a));
 			}
 		}
 	}

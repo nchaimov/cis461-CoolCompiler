@@ -18,7 +18,7 @@ JAVACOPT =  -Xlint:unchecked
 
 all:   Cool.class
 
-Cool.class:	Cool.java ScanDriver.class parser.class Util.class TypeChecker.class
+Cool.class:	Cool.java ScanDriver.class parser.class Util.class TypeChecker.class CodeGenerator.class
 	javac -classpath .:$(LIBS) $(JAVACOPT) $< 
 
 ScanDriver.class:	ScanDriver.java coolScanner.java

@@ -2,7 +2,8 @@ class Main {
 	io : IO := new IO;
 	a : A := new C;
 	b : B := new B;
-	main() : Object {{ io.out_string("Hello world!\n"); io.out_string(a.get()); io.out_string(b.get()); }};
+	e : A := new E;
+	main() : Object {{ io.out_string("Hello world!\n"); io.out_string(a.get()); io.out_string(b.get()); io.out_string(e.get()); }};
 };
 
 class A {
@@ -13,9 +14,24 @@ class A {
 class C inherits A {
 	c : String := "C\n";
 	get() : String {{ c; }};
+	method() : String {{ "String!\n"; }};
 };
 
 class B {
 	b : String := "B\n";
 	get() : String {{ b; }};
+};
+
+class D inherits A {
+	
+};
+
+class E inherits C {
+	z : String := "Hello world\n";
+	get() : String {{ z; }};
+	woot() : String {{ "Test\n"; }};
+};
+
+class Q inherits IO {
+	
 };

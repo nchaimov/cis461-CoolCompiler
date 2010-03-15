@@ -29,11 +29,13 @@ public class Environment {
 		public String name;
 		public CoolClass parent;
 		public HashMap<String, CoolMethod> methods = new HashMap<String, CoolMethod>();
+		public List<CoolMethod> methodList = new LinkedList<CoolMethod>();
 		public HashMap<String, CoolAttribute> attributes = new HashMap<String, CoolAttribute>();
 		public List<CoolAttribute> attrList = new LinkedList<CoolAttribute>();
 		public ASTnode node;
 		public boolean builtin = false;
-		public boolean inheritDone = false;
+		public boolean attrInheritDone = false;
+		public boolean methodInheritDone = false;
 
 		public CoolClass(final String name) {
 			this(name, null);
