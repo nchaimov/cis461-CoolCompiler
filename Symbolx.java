@@ -5,7 +5,7 @@
  * @author Michal Young
  */
 public class Symbolx extends java_cup.runtime.Symbol {
-
+	
 	/*
 	 * Inherited fields from CUP's Symbol class are sym: the symbol type
 	 * parse_state: the parse state. value: is the lexical value of type Object
@@ -25,7 +25,7 @@ public class Symbolx extends java_cup.runtime.Symbol {
 	public int line_num = -1; // -1 will mean "uninitialized"
 	public int col_num = -1; // ""
 	public String source_file = ""; // Can be empty except in nested files
-
+	
 	/*
 	 * Now we need a constructor to fill this information in ... and since we
 	 * are trying to keep the left and right values, we can't override the
@@ -33,19 +33,22 @@ public class Symbolx extends java_cup.runtime.Symbol {
 	 * arguments, alas.
 	 */
 
-	public Symbolx(int id, int _left, int _right, int _line, int _col, Object _val) {
+	public Symbolx(final int id, final int _left, final int _right,
+			final int _line, final int _col, final Object _val) {
 		super(id, _left, _right, _val);
 		line_num = _line;
 		col_num = _col;
 	}
-
-	public Symbolx(int id, int _left, int _right, int _line, int _col, String _file, Object _val) {
+	
+	public Symbolx(final int id, final int _left, final int _right,
+			final int _line, final int _col, final String _file,
+			final Object _val) {
 		super(id, _left, _right, _val);
 		line_num = _line;
 		col_num = _col;
 		source_file = _file;
 	}
-
+	
 }
 
 // Rationale for extending java_cup.runtime.Symbol:
